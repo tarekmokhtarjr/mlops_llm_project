@@ -1,0 +1,21 @@
+# Data
+data/
+
+# Python-generated files
+__pycache__/
+*.py[oc]
+build/
+dist/
+wheels/
+models/
+*.egg-info
+
+# Virtual environments
+.venv
+
+# Test & Coverage
+.coverage
+uv.lock
+htmlcov/
+report_output/
+test_results.txt
