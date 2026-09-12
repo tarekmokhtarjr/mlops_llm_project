@@ -1,0 +1,90 @@
+services:
+
+  qdrant:
+    image: qdrant/qdrant:latest
+    container_name: qdrant-db
+    restart: unless-stopped
+    ports:
+      - "6333:6333"
+      - "6334:6334"
+    volumes:
+      - qdrant_storage:/qdrant/storage
+    networks:
+      - rag-net
+
+# Increasing docker memory usage to at least 16 GB is important
+  embedding:
+    image: vllm/vllm-openai-cpu:v0.29.0
+    container_name: qwen3-embedding
+    restart: unless-stopped
+    ports:
+      - "8001:8000"
+    volumes:
+      - hf_cache:/root/.cache/huggingface
+    environment:
+      VLLM_CPU_KVCACHE_SPACE: "1"
+      VLLM_ENABLE_V1_MULTIPROCESSING: "0"
+      VLLM_LOGGING_LEVEL: "INFO"
+    cpuset: "0-7"
+    command:
+      - "Qwen/Qwen3-Embedding-0.6B"
+      - "--served-model-name"
+      - "Qwen/Qwen3-Embedding-0.6B"
+      - "--runner"
+      - "pooling"
+      - "--host"
+      - "0.0.0.0"
+      - "--port"
+      - "8000"
+      - "--max-model-len"
+      - "2048"
+    security_opt:
+      - seccomp=unconfined
+    cap_add:
+      - SYS_NICE
+    shm_size: "2g"
+    networks:
+      - rag-net
+
+  llm:
+    image: vllm/vllm-openai-cpu:v0.29.0
+    container_name: qwen2.5-0.5b
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    volumes:
+      - hf_cache:/root/.cache/huggingface
+    environment:
+      VLLM_CPU_KVCACHE_SPACE: "1"
+      VLLM_LOGGING_LEVEL: "INFO"
+    cpuset: "8-23"
+    command:
+      - "Qwen/Qwen2.5-0.5B-Instruct"
+      - "--served-model-name"
+      - "Qwen/Qwen2.5-0.5B-Instruct"
+      - "--dtype"
+      - "bfloat16"
+      - "--host"
+      - "0.0.0.0"
+      - "--port"
+      - "8000"
+      - "--max-model-len"
+      - "4096"
+    security_opt:
+      - seccomp=unconfined
+    cap_add:
+      - SYS_NICE
+    shm_size: "4g"
+    networks:
+      - rag-net
+
+volumes:
+  qdrant_storage:
+    name: rag_qdrant_storage
+  hf_cache:
+    name: rag_hf_cache
+
+networks:
+  rag-net:
+    name: rag-net
+    driver: bridge

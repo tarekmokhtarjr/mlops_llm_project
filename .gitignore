@@ -19,3 +19,4 @@ uv.lock
 htmlcov/
 report_output/
 test_results.txt
+/data

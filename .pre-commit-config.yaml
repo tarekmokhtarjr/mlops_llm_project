@@ -1,0 +1,56 @@
+repos:
+  # General Git/file checks
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v6.0.0
+    hooks:
+      - id: check-yaml
+        exclude: ^\.venv/|data/egyptian_civil_law_131_1948_files/|data/egyptian_civil_law_131_1948\.html
+      - id: check-toml
+        exclude: ^\.venv/|data/egyptian_civil_law_131_1948_files/|data/egyptian_civil_law_131_1948\.html
+      - id: check-json
+        exclude: ^\.venv/|data/egyptian_civil_law_131_1948_files/|data/egyptian_civil_law_131_1948\.html
+      - id: end-of-file-fixer
+        exclude: ^\.venv/|data/egyptian_civil_law_131_1948_files/|data/egyptian_civil_law_131_1948\.html
+      - id: trailing-whitespace
+        exclude: ^\.venv/|data/egyptian_civil_law_131_1948_files/|data/egyptian_civil_law_131_1948\.html
+      - id: check-merge-conflict
+        exclude: ^\.venv/|data/egyptian_civil_law_131_1948_files/|data/egyptian_civil_law_131_1948\.html
+      - id: check-added-large-files
+        exclude: ^\.venv/|data/egyptian_civil_law_131_1948_files/|data/egyptian_civil_law_131_1948\.html
+
+  # Python linting and formatting with ruff
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.12.10  # Use the latest stable version
+    hooks:
+      - id: ruff
+        args: [--fix, --line-length=79]
+        exclude: ^\.venv/|data/egyptian_civil_law_131_1948_files/|data/egyptian_civil_law_131_1948\.html
+
+  # Black formatter
+  - repo: https://github.com/psf/black
+    rev: 23.9.1  # Use the latest stable version
+    hooks:
+      - id: black
+        args: [--line-length=79]  # Optional: specify line length if needed
+        exclude: ^\.venv/|data/egyptian_civil_law_131_1948_files/|data/egyptian_civil_law_131_1948\.html
+
+  # Static type checking
+  - repo: https://github.com/pre-commit/mirrors-mypy
+    rev: v1.17.1
+    hooks:
+      - id: mypy
+        exclude: ^\.venv/|data/egyptian_civil_law_131_1948_files/|data/egyptian_civil_law_131_1948\.html
+
+  # Detect accidentally committed secrets
+  - repo: https://github.com/Yelp/detect-secrets
+    rev: v1.5.0
+    hooks:
+      - id: detect-secrets
+        exclude: ^\.venv/|data/egyptian_civil_law_131_1948_files/|data/egyptian_civil_law_131_1948\.html
+
+  # Spelling
+  - repo: https://github.com/codespell-project/codespell
+    rev: v2.4.1
+    hooks:
+      - id: codespell
+        exclude: ^\.venv/|data/egyptian_civil_law_131_1948_files/|data/egyptian_civil_law_131_1948\.html
