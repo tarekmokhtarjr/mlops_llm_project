@@ -30,9 +30,7 @@ QDRANT_HOST = os.getenv(
     "localhost",
 )
 
-QDRANT_PORT = int(
-    os.getenv("QDRANT_PORT", "6333")
-)
+QDRANT_PORT = int(os.getenv("QDRANT_PORT", "6333"))
 
 COLLECTION_NAME = os.getenv(
     "QDRANT_COLLECTION",
@@ -43,6 +41,7 @@ COLLECTION_NAME = os.getenv(
 # ============================================================
 # Qdrant client
 # ============================================================
+
 
 @st.cache_resource
 def get_qdrant_client():
@@ -82,8 +81,8 @@ def normalize_digits(text: str) -> str:
 # Article number extraction
 # ============================================================
 
-def extract_article_number(query: str) -> int | None:
 
+def extract_article_number(query: str) -> int | None:
     normalized = normalize_digits(query)
 
     patterns = [
@@ -93,7 +92,6 @@ def extract_article_number(query: str) -> int | None:
     ]
 
     for pattern in patterns:
-
         match = re.search(
             pattern,
             normalized,
@@ -110,8 +108,8 @@ def extract_article_number(query: str) -> int | None:
 # Qwen embedding
 # ============================================================
 
-def get_embedding(text: str) -> list[float]:
 
+def get_embedding(text: str) -> list[float]:
     response = requests.post(
         EMBEDDING_URL,
         json={
@@ -132,11 +130,9 @@ def get_embedding(text: str) -> list[float]:
 # Exact article search
 # ============================================================
 
-def search_article(article_number: int):
 
-    arabic_number = str(article_number).translate(
-        WESTERN_TO_ARABIC
-    )
+def search_article(article_number: int):
+    arabic_number = str(article_number).translate(WESTERN_TO_ARABIC)
 
     law_number = f"مادة {arabic_number}"
 
@@ -146,9 +142,7 @@ def search_article(article_number: int):
             must=[
                 FieldCondition(
                     key="law_number",
-                    match=MatchValue(
-                        value=law_number
-                    ),
+                    match=MatchValue(value=law_number),
                 )
             ]
         ),
@@ -164,11 +158,11 @@ def search_article(article_number: int):
 # Semantic search
 # ============================================================
 
+
 def semantic_search(
     query: str,
     limit: int = 5,
 ):
-
     query_embedding = get_embedding(query)
 
     results = client.query_points(
@@ -185,21 +179,18 @@ def semantic_search(
 # Query router
 # ============================================================
 
+
 def search(
     query: str,
     limit: int = 5,
 ):
-
     article_number = extract_article_number(query)
 
     if article_number is not None:
-
         return {
             "search_type": "exact_article",
             "article_number": article_number,
-            "results": search_article(
-                article_number
-            ),
+            "results": search_article(article_number),
         }
 
     return {
@@ -216,12 +207,12 @@ def search(
 # Result rendering
 # ============================================================
 
+
 def render_result(
     result,
     search_type: str,
     index: int,
 ):
-
     payload = result.payload or {}
 
     score = getattr(
@@ -231,40 +222,26 @@ def render_result(
     )
 
     with st.container():
-
         # Result header
         if search_type == "exact_article":
-
-            st.markdown(
-                f"### 📜 {payload.get('law_number', 'Article')}"
-            )
+            st.markdown(f"### 📜 {payload.get('law_number', 'Article')}")
 
         else:
-
-            st.markdown(
-                f"### Result {index}"
-            )
+            st.markdown(f"### Result {index}")
 
             if score is not None:
-
-                st.caption(
-                    f"Similarity score: {score:.4f}"
-                )
+                st.caption(f"Similarity score: {score:.4f}")
 
         # Legal hierarchy
         title = payload.get("title")
 
         if title:
-
-            st.markdown(
-                f"**Location:** {title}"
-            )
+            st.markdown(f"**Location:** {title}")
 
         # Content
         content = payload.get("content")
 
         if content:
-
             st.markdown(content)
 
         st.divider()
@@ -286,9 +263,7 @@ st.set_page_config(
 # ============================================================
 
 st.title("⚖️ Egyptian Civil Code")
-st.caption(
-    "Law No. 131 — Semantic & Article Search"
-)
+st.caption("Law No. 131 — Semantic & Article Search")
 
 
 # ============================================================
@@ -296,7 +271,6 @@ st.caption(
 # ============================================================
 
 with st.sidebar:
-
     st.header("Search")
 
     limit = st.slider(
@@ -329,13 +303,9 @@ with st.sidebar:
 
     st.divider()
 
-    st.caption(
-        f"Collection: `{COLLECTION_NAME}`"
-    )
+    st.caption(f"Collection: `{COLLECTION_NAME}`")
 
-    st.caption(
-        f"Embedding: `{EMBEDDING_MODEL}`"
-    )
+    st.caption(f"Embedding: `{EMBEDDING_MODEL}`")
 
 
 # ============================================================
@@ -343,7 +313,6 @@ with st.sidebar:
 # ============================================================
 
 if "messages" not in st.session_state:
-
     st.session_state.messages = []
 
 
@@ -352,30 +321,17 @@ if "messages" not in st.session_state:
 # ============================================================
 
 for message in st.session_state.messages:
-
-    with st.chat_message(
-        message["role"]
-    ):
-
-        st.markdown(
-            message["content"]
-        )
+    with st.chat_message(message["role"]):
+        st.markdown(message["content"])
 
         # Render retrieved documents
-        if (
-            message["role"] == "assistant"
-            and "results" in message
-        ):
-
-            search_type = message[
-                "search_type"
-            ]
+        if message["role"] == "assistant" and "results" in message:
+            search_type = message["search_type"]
 
             for index, result in enumerate(
                 message["results"],
                 start=1,
             ):
-
                 render_result(
                     result,
                     search_type,
@@ -387,13 +343,10 @@ for message in st.session_state.messages:
 # Chat input
 # ============================================================
 
-query = st.chat_input(
-    "Ask about Egyptian Civil Code..."
-)
+query = st.chat_input("Ask about Egyptian Civil Code...")
 
 
 if query:
-
     # --------------------------------------------------------
     # Store user message
     # --------------------------------------------------------
@@ -408,7 +361,6 @@ if query:
     # Display user message immediately
 
     with st.chat_message("user"):
-
         st.markdown(query)
 
     # --------------------------------------------------------
@@ -416,63 +368,44 @@ if query:
     # --------------------------------------------------------
 
     with st.chat_message("assistant"):
-
         with st.spinner("Searching the law..."):
-
             try:
-
                 search_result = search(
                     query,
                     limit=limit,
                 )
 
-                results = search_result[
-                    "results"
-                ]
+                results = search_result["results"]
 
-                search_type = search_result[
-                    "search_type"
-                ]
+                search_type = search_result["search_type"]
 
                 # ------------------------------------------------
                 # No results
                 # ------------------------------------------------
 
                 if not results:
-
                     response_text = (
                         "I couldn't find a matching "
                         "article in the database."
                     )
 
-                    st.markdown(
-                        response_text
-                    )
+                    st.markdown(response_text)
 
                 # ------------------------------------------------
                 # Exact article
                 # ------------------------------------------------
 
                 elif search_type == "exact_article":
+                    article_number = search_result["article_number"]
 
-                    article_number = search_result[
-                        "article_number"
-                    ]
+                    response_text = f"Found Article " f"{article_number}."
 
-                    response_text = (
-                        f"Found Article "
-                        f"{article_number}."
-                    )
-
-                    st.markdown(
-                        response_text
-                    )
+                    st.markdown(response_text)
 
                     for index, result in enumerate(
                         results,
                         start=1,
                     ):
-
                         render_result(
                             result,
                             search_type,
@@ -484,21 +417,17 @@ if query:
                 # ------------------------------------------------
 
                 else:
-
                     response_text = (
                         f"I found {len(results)} "
                         "potentially relevant articles."
                     )
 
-                    st.markdown(
-                        response_text
-                    )
+                    st.markdown(response_text)
 
                     for index, result in enumerate(
                         results,
                         start=1,
                     ):
-
                         render_result(
                             result,
                             search_type,
@@ -519,22 +448,14 @@ if query:
                 )
 
             except requests.RequestException as exc:
-
-                error = (
-                    "The embedding service could "
-                    "not be reached."
-                )
+                error = "The embedding service could " "not be reached."
 
                 st.error(error)
 
                 st.exception(exc)
 
             except Exception as exc:
-
-                error = (
-                    "An error occurred while "
-                    "searching Qdrant."
-                )
+                error = "An error occurred while " "searching Qdrant."
 
                 st.error(error)
 

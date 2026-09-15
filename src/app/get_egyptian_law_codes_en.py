@@ -29,10 +29,20 @@ ARTICLE_RE = re.compile(
     re.IGNORECASE,
 )
 
-PART_RE = re.compile(r"^\s*Part\s+(?:One|Two|Three|Four|Five|\d+)\s*:\s*(.+?)\s*$", re.I)
-BOOK_RE = re.compile(r"^\s*Book\s+(?:One|Two|Three|Four|Five|\d+)\s*:\s*(.+?)\s*$", re.I)
-CHAPTER_RE = re.compile(r"^\s*Chapter\s+(?:One|Two|Three|Four|Five|Six|Seven|Eight|Nine|Ten|\d+)\s*:\s*(.+?)\s*$", re.I)
-SECTION_RE = re.compile(r"^\s*Section\s+(?:One|Two|Three|Four|Five|Six|Seven|Eight|Nine|Ten|\d+)\s*:\s*(.+?)\s*$", re.I)
+PART_RE = re.compile(
+    r"^\s*Part\s+(?:One|Two|Three|Four|Five|\d+)\s*:\s*(.+?)\s*$", re.I
+)
+BOOK_RE = re.compile(
+    r"^\s*Book\s+(?:One|Two|Three|Four|Five|\d+)\s*:\s*(.+?)\s*$", re.I
+)
+CHAPTER_RE = re.compile(
+    r"^\s*Chapter\s+(?:One|Two|Three|Four|Five|Six|Seven|Eight|Nine|Ten|\d+)\s*:\s*(.+?)\s*$",
+    re.I,
+)
+SECTION_RE = re.compile(
+    r"^\s*Section\s+(?:One|Two|Three|Four|Five|Six|Seven|Eight|Nine|Ten|\d+)\s*:\s*(.+?)\s*$",
+    re.I,
+)
 NUMBERED_TOPIC_RE = re.compile(r"^\s*\d+\s*[-–—]\s*(.+?)\s*$")
 
 
@@ -135,7 +145,9 @@ def is_likely_unnumbered_topic(line):
     """
     if not line or len(line) > 90:
         return False
-    if line.lower().startswith(("page|", "article ", "part ", "book ", "chapter ", "section ")):
+    if line.lower().startswith(
+        ("page|", "article ", "part ", "book ", "chapter ", "section ")
+    ):
         return False
     if re.search(r"[.;:!?]$", line):
         return False
@@ -146,8 +158,7 @@ def is_likely_unnumbered_topic(line):
     if not (2 <= len(words) <= 10):
         return False
     titlecase_words = sum(
-        1 for w in words
-        if w[:1].isupper() or w.isupper() or w[:1].isdigit()
+        1 for w in words if w[:1].isupper() or w.isupper() or w[:1].isdigit()
     )
     return titlecase_words / len(words) >= 0.60
 
@@ -179,7 +190,8 @@ def parse_articles(pdf_path):
 
         # Remove page labels and blank noise.
         raw_lines = [
-            x for x in raw_lines
+            x
+            for x in raw_lines
             if x and not re.fullmatch(r"Page\s*\|\s*\d+", x, re.I)
         ]
 
@@ -286,7 +298,9 @@ def parse_articles(pdf_path):
 
         # Normalize whitespace but keep paragraph/bullet boundaries.
         article["text_en"] = re.sub(r"[ \t]+", " ", article["text_en"])
-        article["text_en"] = re.sub(r"\n{3,}", "\n\n", article["text_en"]).strip()
+        article["text_en"] = re.sub(
+            r"\n{3,}", "\n\n", article["text_en"]
+        ).strip()
 
     # Sort by article number in case a PDF page boundary produced unusual order.
     articles.sort(key=lambda x: (x["article_number"], x["source_page"]))
@@ -296,7 +310,9 @@ def parse_articles(pdf_path):
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("pdf", type=Path, help="Path to Law No. 131 of 1948 PDF")
+    parser.add_argument(
+        "pdf", type=Path, help="Path to Law No. 131 of 1948 PDF"
+    )
     parser.add_argument(
         "-o",
         "--output",

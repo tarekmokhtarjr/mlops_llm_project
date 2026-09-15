@@ -1,0 +1,6 @@
+[core]
+    remote = gdrive_remote
+['remote "gdrive_remote"']
+    url = gdrive://1KXHUTIMsB1sBSQuGraYFpempoRpwIsrc
+    gdrive_use_service_account = true
+    gdrive_service_account_json_file_path = ../arabic-legal-documents-llm-9a9b19f505c4.json

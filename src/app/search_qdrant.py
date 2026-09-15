@@ -29,9 +29,7 @@ QDRANT_HOST = os.getenv(
     "localhost",
 )
 
-QDRANT_PORT = int(
-    os.getenv("QDRANT_PORT", "6333")
-)
+QDRANT_PORT = int(os.getenv("QDRANT_PORT", "6333"))
 
 COLLECTION_NAME = os.getenv(
     "QDRANT_COLLECTION",
@@ -78,6 +76,7 @@ def normalize_digits(text: str) -> str:
 # Article number extraction
 # ============================================================
 
+
 def extract_article_number(query: str) -> int | None:
     """
     Detect an explicit article number in a user query.
@@ -100,7 +99,6 @@ def extract_article_number(query: str) -> int | None:
         # Arabic
         r"\bالمادة\s*(\d+)\b",
         r"\bمادة\s*(\d+)\b",
-
         # English
         r"\barticle\s*#?\s*(\d+)\b",
     ]
@@ -121,6 +119,7 @@ def extract_article_number(query: str) -> int | None:
 # ============================================================
 # Qwen embedding
 # ============================================================
+
 
 def get_embedding(text: str) -> list[float]:
     """
@@ -147,6 +146,7 @@ def get_embedding(text: str) -> list[float]:
 # ============================================================
 # Exact article search
 # ============================================================
+
 
 def search_article(article_number: int):
     """
@@ -187,9 +187,7 @@ def search_article(article_number: int):
             must=[
                 FieldCondition(
                     key="law_number",
-                    match=MatchValue(
-                        value=law_number
-                    ),
+                    match=MatchValue(value=law_number),
                 )
             ]
         ),
@@ -204,6 +202,7 @@ def search_article(article_number: int):
 # ============================================================
 # Semantic search
 # ============================================================
+
 
 def semantic_search(query: str, limit: int = 5):
     """
@@ -226,6 +225,7 @@ def semantic_search(query: str, limit: int = 5):
 # ============================================================
 # Natural-language search router
 # ============================================================
+
 
 def search(query: str, limit: int = 5):
     """
@@ -253,11 +253,7 @@ def search(query: str, limit: int = 5):
     # --------------------------------------------------------
 
     if article_number is not None:
-
-        print(
-            f"[Router] Detected article number: "
-            f"{article_number}"
-        )
+        print(f"[Router] Detected article number: " f"{article_number}")
 
         results = search_article(article_number)
 
@@ -290,6 +286,7 @@ def search(query: str, limit: int = 5):
 # Pretty printing
 # ============================================================
 
+
 def print_results(search_result):
     """
     Display search results in a human-readable format.
@@ -304,10 +301,7 @@ def print_results(search_result):
     print(f"Search type: {search_type}")
 
     if search_result["article_number"] is not None:
-        print(
-            f"Article number: "
-            f"{search_result['article_number']}"
-        )
+        print(f"Article number: " f"{search_result['article_number']}")
 
     print("=" * 70)
 
@@ -316,7 +310,6 @@ def print_results(search_result):
         return
 
     for index, result in enumerate(results, start=1):
-
         print()
         print(f"--- Result {index} ---")
 
@@ -329,20 +322,11 @@ def print_results(search_result):
 
         payload = result.payload or {}
 
-        print(
-            f"Law Number: "
-            f"{payload.get('law_number')}"
-        )
+        print(f"Law Number: " f"{payload.get('law_number')}")
 
-        print(
-            f"Title: "
-            f"{payload.get('title')}"
-        )
+        print(f"Title: " f"{payload.get('title')}")
 
-        print(
-            f"Content: "
-            f"{payload.get('content')}"
-        )
+        print(f"Content: " f"{payload.get('content')}")
 
     print()
 
@@ -351,8 +335,8 @@ def print_results(search_result):
 # Interactive CLI
 # ============================================================
 
-def main():
 
+def main():
     print("=" * 70)
     print("Egyptian Law 131 - Qdrant Search")
     print("=" * 70)
@@ -367,7 +351,6 @@ def main():
     print()
 
     while True:
-
         query = input("Search: ").strip()
 
         if not query:
@@ -377,24 +360,17 @@ def main():
             break
 
         try:
-
             result = search(query)
 
             print_results(result)
 
         except requests.RequestException as exc:
-
             print()
-            print(
-                f"Embedding API error: {exc}"
-            )
+            print(f"Embedding API error: {exc}")
 
         except Exception as exc:
-
             print()
-            print(
-                f"Search error: {exc}"
-            )
+            print(f"Search error: {exc}")
 
 
 if __name__ == "__main__":

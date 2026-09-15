@@ -15,6 +15,7 @@ QDRANT_PORT = 6333
 
 COLLECTION_NAME = "test_qwen_embeddings"
 
+
 def get_embedding(text: str) -> list[float]:
     response = requests.post(
         EMBEDDING_URL,
@@ -35,11 +36,14 @@ def get_embedding(text: str) -> list[float]:
 
     return embedding
 
+
 def main():
     # ---------------------------------------------------------
     # 1. Read JSON data from the file
     # ---------------------------------------------------------
-    with open("data/egyptian_civil_law_131_1948.json", "r", encoding="utf-8") as file:
+    with open(
+        "data/egyptian_civil_law_131_1948.json", "r", encoding="utf-8"
+    ) as file:
         data = json.load(file)
 
     # ---------------------------------------------------------
@@ -121,6 +125,7 @@ def main():
         print(f"Law Number: {result.payload['law_number']}")
         print(f"Title: {result.payload['title']}")
         print(f"Content: {result.payload['content']}")
+
 
 if __name__ == "__main__":
     main()
