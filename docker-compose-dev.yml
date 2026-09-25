@@ -11,6 +11,35 @@ services:
       - qdrant_storage:/qdrant/storage
     networks:
       - rag-net
+  llm_guard:
+    image: vllm/vllm-openai-cpu:v0.29.0
+    container_name: qwen3-guard
+    restart: unless-stopped
+    ports:
+      - "8002:8000"
+    volumes:
+      - hf_cache:/root/.cache/huggingface
+    environment:
+      VLLM_CPU_KVCACHE_SPACE: "1"
+      VLLM_ENABLE_V1_MULTIPROCESSING: "0"
+      VLLM_LOGGING_LEVEL: "INFO"
+    cpuset: "0-7"
+    command:
+      - "Qwen/Qwen3Guard-Gen-0.6B"
+      - "--served-model-name"
+      - "Qwen/Qwen3Guard-Gen-0.6B"
+      - "--host"
+      - "0.0.0.0"
+      - "--port"
+      - "8000"
+      - "--max-model-len"
+      - "2048"
+    security_opt:
+      - seccomp=unconfined
+    cap_add:
+      - SYS_NICE
+    networks:
+      - rag-net
 
 # Increasing docker memory usage to at least 16 GB is important
   embedding:
@@ -42,7 +71,6 @@ services:
       - seccomp=unconfined
     cap_add:
       - SYS_NICE
-    shm_size: "2g"
     networks:
       - rag-net
 
@@ -74,7 +102,7 @@ services:
       - seccomp=unconfined
     cap_add:
       - SYS_NICE
-    shm_size: "4g"
+    shm_size: "2g"
     networks:
       - rag-net
 

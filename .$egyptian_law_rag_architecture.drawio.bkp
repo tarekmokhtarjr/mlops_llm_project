@@ -1,0 +1,85 @@
+<mxfile host="Electron">
+  <diagram id="egyptian-law-rag" name="Egyptian Law RAG Architecture">
+    <mxGraphModel dx="2642" dy="1066" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="850" pageHeight="1100" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+        <mxCell id="chat" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#DAF0FF;strokeColor=#1685B8;fontStyle=1;align=center;verticalAlign=middle;" value="Chat UI" vertex="1">
+          <mxGeometry height="55" width="150" x="360" y="30" as="geometry" />
+        </mxCell>
+        <mxCell id="input_guard" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFF0D9;strokeColor=#E07800;align=center;verticalAlign=middle;" value="&lt;b&gt;GUARDRAILS - QWEN3Gaurd&lt;/b&gt;&lt;br&gt;Input Validation&lt;br&gt;&lt;br&gt;• Query validation&lt;br&gt;• Prompt-injection detection&lt;br&gt;• Legal-domain scope check" vertex="1">
+          <mxGeometry height="125" width="220" x="325" y="125" as="geometry" />
+        </mxCell>
+        <mxCell id="embed" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#E5F5E5;strokeColor=#4D944D;fontStyle=1;align=center;verticalAlign=middle;" value="&lt;b&gt;vLLM&lt;/b&gt;&lt;br&gt;Qwen3-Embedding-0.6B&lt;br&gt;Embedding Model" vertex="1">
+          <mxGeometry height="70" width="240" x="315" y="285" as="geometry" />
+        </mxCell>
+        <mxCell id="qdrant" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#E5F5E5;strokeColor=#4D944D;fontStyle=1;align=center;verticalAlign=middle;" value="Qdrant&lt;br&gt;Vector Database" vertex="1">
+          <mxGeometry height="65" width="150" x="360" y="390" as="geometry" />
+        </mxCell>
+        <mxCell id="llm" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#F0E4FA;strokeColor=#7A43B5;fontStyle=1;align=center;verticalAlign=middle;" value="&lt;b&gt;vLLM&lt;/b&gt;&lt;br&gt;Qwen2.5-0.5B&lt;br&gt;LLM&lt;br&gt;(Reasoning)" vertex="1">
+          <mxGeometry height="80" width="150" x="360" y="490" as="geometry" />
+        </mxCell>
+        <mxCell id="output_guard" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFF0D9;strokeColor=#E07800;align=center;verticalAlign=middle;" value="&lt;b&gt;GUARDRAILS&lt;/b&gt;&lt;br&gt;Output Validation&lt;br&gt;&lt;br&gt;• Grounding check&lt;br&gt;• Citation / source validation&lt;br&gt;• PII / sensitive data&lt;br&gt;• Malformed / unsafe output" vertex="1">
+          <mxGeometry height="125" width="220" x="325" y="610" as="geometry" />
+        </mxCell>
+        <mxCell id="answer" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#DAF0FF;strokeColor=#1685B8;fontStyle=1;align=center;verticalAlign=middle;" value="Validated Answer" vertex="1">
+          <mxGeometry height="55" width="150" x="360" y="775" as="geometry" />
+        </mxCell>
+        <mxCell id="langfuse" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FBE2EB;strokeColor=#B82D68;align=center;verticalAlign=middle;" value="Langfuse" vertex="1">
+          <mxGeometry height="55" width="155" x="55" y="895" as="geometry" />
+        </mxCell>
+        <mxCell id="langfuse_detail" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FBE2EB;strokeColor=#B82D68;align=center;verticalAlign=middle;" value="Tracing&lt;br&gt;• Tokens&lt;br&gt;• Latency&lt;br&gt;• Prompts&lt;br&gt;• Retrieval&lt;br&gt;• Generations" vertex="1">
+          <mxGeometry height="100" width="195" x="35" y="970" as="geometry" />
+        </mxCell>
+        <mxCell id="ragas" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFF9DE;strokeColor=#D9A400;align=center;verticalAlign=middle;" value="RAGAS" vertex="1">
+          <mxGeometry height="55" width="155" x="335" y="895" as="geometry" />
+        </mxCell>
+        <mxCell id="ragas_detail" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFF9DE;strokeColor=#D9A400;align=center;verticalAlign=middle;" value="RAG Quality&lt;br&gt;• Faithfulness&lt;br&gt;• Context Precision&lt;br&gt;• Context Recall&lt;br&gt;• Answer Relevance" vertex="1">
+          <mxGeometry height="110" width="195" x="315" y="970" as="geometry" />
+        </mxCell>
+        <mxCell id="mlflow" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#F0E4FA;strokeColor=#7A43B5;fontStyle=1;align=center;verticalAlign=middle;" value="MLflow" vertex="1">
+          <mxGeometry height="55" width="155" x="610" y="895" as="geometry" />
+        </mxCell>
+        <mxCell id="mlflow_detail" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#F0E4FA;strokeColor=#7A43B5;fontStyle=1;align=center;verticalAlign=middle;" value="Experiments / Models / Datasets / Metrics" vertex="1">
+          <mxGeometry height="65" width="205" x="585" y="970" as="geometry" />
+        </mxCell>
+        <mxCell id="e1" edge="1" parent="1" source="chat" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;" target="input_guard">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e2" edge="1" parent="1" source="input_guard" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;" target="embed">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e3" edge="1" parent="1" source="embed" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;" target="qdrant">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e4" edge="1" parent="1" source="qdrant" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;" target="llm">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e5" edge="1" parent="1" source="llm" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;" target="output_guard">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e6" edge="1" parent="1" source="output_guard" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;" target="answer">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e8" edge="1" parent="1" source="answer" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;dashed=1;endArrow=block;" target="langfuse">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e9" edge="1" parent="1" source="answer" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;dashed=1;endArrow=block;" target="ragas">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e10" edge="1" parent="1" source="answer" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;dashed=1;endArrow=block;" target="mlflow">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e11" edge="1" parent="1" source="langfuse" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=none;" target="langfuse_detail">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e12" edge="1" parent="1" source="ragas" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=none;" target="ragas_detail">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e13" edge="1" parent="1" source="mlflow" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=none;" target="mlflow_detail">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

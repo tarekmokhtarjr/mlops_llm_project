@@ -1,0 +1,205 @@
+<mxfile host="app.diagrams.net" modified="2026-09-18T20:00:00.000Z" agent="ChatGPT" version="24.7.17">
+  <diagram id="rag-mlops" name="RAG MLOps Architecture">
+    <mxGraphModel dx="1422" dy="794" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1600" pageHeight="1200" math="0" shadow="0">
+      <root>
+        <mxCell id="0"/>
+        <mxCell id="1" parent="0"/>
+
+        <!-- Streamlit -->
+        <mxCell id="streamlit" value="Streamlit&#xa;Chat UI"
+          style="rounded=1;whiteSpace=wrap;html=1;fillColor=#E1F5FE;strokeColor=#0277BD;strokeWidth=2;fontSize=16;fontStyle=1;"
+          vertex="1" parent="1">
+          <mxGeometry x="600" y="40" width="240" height="70" as="geometry"/>
+        </mxCell>
+
+        <!-- Input Guardrails -->
+        <mxCell id="guard_in" value="GUARDRAILS&#xa;Input Validation&#xa;&#xa;• Query validation&#xa;• Prompt-injection detection&#xa;• Legal-domain scope check"
+          style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFF3E0;strokeColor=#EF6C00;strokeWidth=3;fontSize=13;fontStyle=1;"
+          vertex="1" parent="1">
+          <mxGeometry x="550" y="150" width="340" height="145" as="geometry"/>
+        </mxCell>
+
+        <!-- LangChain RAG -->
+        <mxCell id="langchain" value="LangChain RAG"
+          style="rounded=1;whiteSpace=wrap;html=1;fillColor=#E8F5E9;strokeColor=#2E7D32;strokeWidth=2;fontSize=16;fontStyle=1;"
+          vertex="1" parent="1">
+          <mxGeometry x="600" y="340" width="240" height="70" as="geometry"/>
+        </mxCell>
+
+        <!-- Qdrant -->
+        <mxCell id="qdrant" value="Qdrant&#xa;Vector Database"
+          style="rounded=1;whiteSpace=wrap;html=1;fillColor=#E8F5E9;strokeColor=#2E7D32;strokeWidth=2;fontSize=14;fontStyle=1;"
+          vertex="1" parent="1">
+          <mxGeometry x="250" y="470" width="230" height="80" as="geometry"/>
+        </mxCell>
+
+        <!-- Embeddings -->
+        <mxCell id="embedding" value="Qwen3-Embedding-0.6B&#xa;Embedding Model"
+          style="rounded=1;whiteSpace=wrap;html=1;fillColor=#E8F5E9;strokeColor=#2E7D32;strokeWidth=2;fontSize=13;fontStyle=1;"
+          vertex="1" parent="1">
+          <mxGeometry x="180" y="600" width="370" height="80" as="geometry"/>
+        </mxCell>
+
+        <!-- vLLM -->
+        <mxCell id="vllm" value="vLLM&#xa;Inference Server"
+          style="rounded=1;whiteSpace=wrap;html=1;fillColor=#F3E5F5;strokeColor=#7B1FA2;strokeWidth=2;fontSize=14;fontStyle=1;"
+          vertex="1" parent="1">
+          <mxGeometry x="930" y="470" width="230" height="80" as="geometry"/>
+        </mxCell>
+
+        <!-- Qwen -->
+        <mxCell id="qwen" value="Qwen2.5-0.5B&#xa;LLM"
+          style="rounded=1;whiteSpace=wrap;html=1;fillColor=#F3E5F5;strokeColor=#7B1FA2;strokeWidth=2;fontSize=14;fontStyle=1;"
+          vertex="1" parent="1">
+          <mxGeometry x="930" y="600" width="230" height="80" as="geometry"/>
+        </mxCell>
+
+        <!-- Output Guardrails -->
+        <mxCell id="guard_out" value="GUARDRAILS&#xa;Output Validation&#xa;&#xa;• Grounding check&#xa;• Citation / source validation&#xa;• PII / sensitive data&#xa;• Malformed / unsafe output"
+          style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFF3E0;strokeColor=#EF6C00;strokeWidth=3;fontSize=13;fontStyle=1;"
+          vertex="1" parent="1">
+          <mxGeometry x="550" y="730" width="340" height="145" as="geometry"/>
+        </mxCell>
+
+        <!-- Answer -->
+        <mxCell id="answer" value="Validated Answer"
+          style="rounded=1;whiteSpace=wrap;html=1;fillColor=#E1F5FE;strokeColor=#0277BD;strokeWidth=2;fontSize=16;fontStyle=1;"
+          vertex="1" parent="1">
+          <mxGeometry x="600" y="920" width="240" height="70" as="geometry"/>
+        </mxCell>
+
+        <!-- Langfuse -->
+        <mxCell id="langfuse" value="Langfuse"
+          style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FCE4EC;strokeColor=#C2185B;strokeWidth=2;fontSize=16;fontStyle=1;"
+          vertex="1" parent="1">
+          <mxGeometry x="100" y="1060" width="230" height="70" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="langfuse_details" value="Tracing&#xa;• Tokens&#xa;• Latency&#xa;• Prompts&#xa;• Retrieval&#xa;• Generations"
+          style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FCE4EC;strokeColor=#C2185B;fontSize=12;"
+          vertex="1" parent="1">
+          <mxGeometry x="80" y="1160" width="270" height="130" as="geometry"/>
+        </mxCell>
+
+        <!-- RAGAS -->
+        <mxCell id="ragas" value="RAGAS"
+          style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFDE7;strokeColor=#F9A825;strokeWidth=2;fontSize=16;fontStyle=1;"
+          vertex="1" parent="1">
+          <mxGeometry x="520" y="1060" width="230" height="70" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="ragas_details" value="RAG Quality&#xa;• Faithfulness&#xa;• Context Precision&#xa;• Context Recall&#xa;• Answer Relevance"
+          style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFDE7;strokeColor=#F9A825;fontSize=12;"
+          vertex="1" parent="1">
+          <mxGeometry x="490" y="1160" width="290" height="130" as="geometry"/>
+        </mxCell>
+
+        <!-- MLflow -->
+        <mxCell id="mlflow" value="MLflow"
+          style="rounded=1;whiteSpace=wrap;html=1;fillColor=#EDE7F6;strokeColor=#512DA8;strokeWidth=2;fontSize=16;fontStyle=1;"
+          vertex="1" parent="1">
+          <mxGeometry x="940" y="1060" width="230" height="70" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="mlflow_details" value="Experiments / Models / Datasets / Metrics"
+          style="rounded=1;whiteSpace=wrap;html=1;fillColor=#EDE7F6;strokeColor=#512DA8;fontSize=12;"
+          vertex="1" parent="1">
+          <mxGeometry x="900" y="1160" width="310" height="80" as="geometry"/>
+        </mxCell>
+
+        <!-- Edges -->
+
+        <mxCell id="e1" edge="1" parent="1" source="streamlit" target="guard_in"
+          style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;strokeWidth=2;">
+        </mxCell>
+
+        <mxCell id="e2" edge="1" parent="1" source="guard_in" target="langchain"
+          style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;strokeWidth=2;">
+        </mxCell>
+
+        <mxCell id="e3" edge="1" parent="1" source="langchain" target="qdrant"
+          style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;strokeWidth=2;">
+        </mxCell>
+
+        <mxCell id="e4" edge="1" parent="1" source="embedding" target="qdrant"
+          style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;strokeWidth=2;">
+        </mxCell>
+
+        <mxCell id="e5" edge="1" parent="1" source="qdrant" target="langchain"
+          style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;strokeWidth=2;">
+        </mxCell>
+
+        <mxCell id="e6" edge="1" parent="1" source="langchain" target="vllm"
+          style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;strokeWidth=2;">
+        </mxCell>
+
+        <mxCell id="e7" edge="1" parent="1" source="vllm" target="qwen"
+          style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;strokeWidth=2;">
+        </mxCell>
+
+        <mxCell id="e8" edge="1" parent="1" source="qwen" target="guard_out"
+          style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;strokeWidth=2;">
+        </mxCell>
+
+        <mxCell id="e9" edge="1" parent="1" source="guard_out" target="answer"
+          style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;strokeWidth=2;">
+        </mxCell>
+
+        <!-- Observability connections -->
+
+        <mxCell id="e10" edge="1" parent="1" source="langchain" target="langfuse"
+          style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;dashed=1;strokeColor=#C2185B;">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="e11" edge="1" parent="1" source="qwen" target="langfuse"
+          style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;dashed=1;strokeColor=#C2185B;">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="e12" edge="1" parent="1" source="guard_in" target="langfuse"
+          style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;dashed=1;strokeColor=#C2185B;">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="e13" edge="1" parent="1" source="guard_out" target="langfuse"
+          style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;dashed=1;strokeColor=#C2185B;">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="e14" edge="1" parent="1" source="langfuse" target="langfuse_details"
+          style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;strokeColor=#C2185B;">
+        </mxCell>
+
+        <!-- RAGAS connections -->
+
+        <mxCell id="e15" edge="1" parent="1" source="answer" target="ragas"
+          style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;dashed=1;strokeColor=#F9A825;">
+        </mxCell>
+
+        <mxCell id="e16" edge="1" parent="1" source="qdrant" target="ragas"
+          style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;dashed=1;strokeColor=#F9A825;">
+        </mxCell>
+
+        <mxCell id="e17" edge="1" parent="1" source="ragas" target="ragas_details"
+          style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;strokeColor=#F9A825;">
+        </mxCell>
+
+        <!-- MLflow -->
+
+        <mxCell id="e18" edge="1" parent="1" source="langfuse" target="mlflow"
+          style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;dashed=1;strokeColor=#512DA8;">
+        </mxCell>
+
+        <mxCell id="e19" edge="1" parent="1" source="ragas" target="mlflow"
+          style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;dashed=1;strokeColor=#512DA8;">
+        </mxCell>
+
+        <mxCell id="e20" edge="1" parent="1" source="mlflow" target="mlflow_details"
+          style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;strokeColor=#512DA8;">
+        </mxCell>
+
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

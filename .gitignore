@@ -1,6 +1,7 @@
 # Data
 data/
 arabic-legal-documents-llm-9a9b19f505c4.json
+client_secrets.json
 
 # Python-generated files
 __pycache__/
@@ -8,7 +9,6 @@ __pycache__/
 build/
 dist/
 wheels/
-models/
 *.egg-info
 
 # Virtual environments
