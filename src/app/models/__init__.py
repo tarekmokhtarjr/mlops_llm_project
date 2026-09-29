@@ -1,1 +1,1 @@
-from . import qwen_chatbot
+from . import chatbot_llm_model

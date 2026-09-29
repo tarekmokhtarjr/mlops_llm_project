@@ -59,11 +59,10 @@ client = get_qdrant_client()
 # ============================================================
 
 ARABIC_DIGITS = "٠١٢٣٤٥٦٧٨٩"
-PERSIAN_DIGITS = "۰۱۲۳۴۵۶۷۸۹"
 WESTERN_DIGITS = "0123456789"
 
 DIGIT_TRANSLATION = str.maketrans(
-    ARABIC_DIGITS + PERSIAN_DIGITS,
+    ARABIC_DIGITS,
     WESTERN_DIGITS + WESTERN_DIGITS,
 )
 

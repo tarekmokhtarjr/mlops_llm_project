@@ -2,7 +2,7 @@
 data/
 arabic-legal-documents-llm-9a9b19f505c4.json
 client_secrets.json
-
+.dvc/config
 # Python-generated files
 __pycache__/
 *.py[oc]
@@ -13,6 +13,9 @@ wheels/
 
 # Virtual environments
 .venv
+
+# Configurations
+.env
 
 # Test & Coverage
 .coverage
