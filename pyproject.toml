@@ -33,3 +33,6 @@ dev = [
     "pytest-cov>=7.1.0",
     "pytest-html-plus>=1.2.0",
 ]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/app"]
