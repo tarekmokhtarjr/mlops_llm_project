@@ -5,7 +5,7 @@ import os
 import streamlit as st
 from dotenv import load_dotenv
 
-from app.clients import VectorDBClientWrapper
+from app.clients.vector_db_client import VectorDBClientWrapper
 from app.models.chat import ChatBotLlmModel
 from app.models.embedding import EmbeddingModel
 from app.models.guard import GuardModel
