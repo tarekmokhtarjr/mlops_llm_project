@@ -5,11 +5,11 @@ import os
 import streamlit as st
 from dotenv import load_dotenv
 
-from clients import VectorDBClientWrapper
-from models.chat import ChatBotLlmModel
-from models.embedding import EmbeddingModel
-from models.guard import GuardModel
-from services.rag import RAG
+from app.clients import VectorDBClientWrapper
+from app.models.chat import ChatBotLlmModel
+from app.models.embedding import EmbeddingModel
+from app.models.guard import GuardModel
+from app.services.rag import RAG
 
 
 load_dotenv()
