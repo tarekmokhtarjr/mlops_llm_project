@@ -89,7 +89,7 @@ class GuardModel:
             GuardResult
         )
 
-        self.result_guard = Guard.from_pydantic(
+        self.result_guard = Guard.for_pydantic(
             output_class=GuardResult
         )
 
