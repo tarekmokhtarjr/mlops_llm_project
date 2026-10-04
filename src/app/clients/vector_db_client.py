@@ -84,10 +84,7 @@ class VectorDBClientWrapper:
             ),
         )
 
-    def upsert(
-        self,
-        points: List[PointStruct],
-    ) -> None:
+    def upsert(self, points: List[PointStruct]) -> None:
         """
         Insert or update vectors and their payloads.
 
