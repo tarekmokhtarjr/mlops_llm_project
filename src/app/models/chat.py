@@ -32,5 +32,5 @@ class ChatBotLlmModel:
         Returns:
             str: The content of the model's response.
         """
-        response = self.model.invoke(prompt)
+        response = self.chatbot_llm.invoke(prompt)
         return response.content
