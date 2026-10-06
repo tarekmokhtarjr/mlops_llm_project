@@ -27,7 +27,6 @@ class VectorDBClientWrapper:
 
     def collection_exists(self) -> bool:
         collections = self.client.get_collections()
-
         return any(
             collection.name == self.collection_name
             for collection in collections.collections
@@ -65,7 +64,6 @@ class VectorDBClientWrapper:
         """
         Semantic/vector search.
         """
-
         response = self.client.query_points(
             collection_name=self.collection_name,
             query=query_vector,
@@ -74,7 +72,6 @@ class VectorDBClientWrapper:
             query_filter=query_filter,
             with_payload=True,
         )
-
         return response.points
 
     def search_article(
@@ -88,7 +85,6 @@ class VectorDBClientWrapper:
 
             law_number = "مادة ١"
         """
-
         results, _ = self.client.scroll(
             collection_name=self.collection_name,
             scroll_filter=Filter(
@@ -105,7 +101,6 @@ class VectorDBClientWrapper:
             with_payload=True,
             with_vectors=False,
         )
-
         return results
 
     def get_all_documents(
@@ -120,13 +115,9 @@ class VectorDBClientWrapper:
         search because lexical retrieval works directly
         against the article text.
         """
-
         all_points = []
-
         offset = None
-
         while True:
-
             points, next_offset = self.client.scroll(
                 collection_name=self.collection_name,
                 limit=100,
@@ -134,12 +125,8 @@ class VectorDBClientWrapper:
                 with_payload=True,
                 with_vectors=False,
             )
-
             all_points.extend(points)
-
             if next_offset is None:
                 break
-
             offset = next_offset
-
         return all_points
