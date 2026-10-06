@@ -3,43 +3,21 @@ from typing import Any, List, Optional
 from qdrant_client import QdrantClient
 from qdrant_client.models import (
     Distance,
+    FieldCondition,
+    Filter,
+    MatchValue,
     PointStruct,
     VectorParams,
 )
 
 
 class VectorDBClientWrapper:
-    """
-    Application-level wrapper around the official Qdrant client.
-
-    Responsible for:
-    - connecting to Qdrant
-    - collection management
-    - inserting vectors
-    - vector similarity search
-    - retrieving stored points
-
-    Does NOT handle:
-    - embedding generation
-    - LLM calls
-    - prompt construction
-    - RAG orchestration
-    """
-
     def __init__(
         self,
         url: str,
         collection_name: str,
         api_key: Optional[str] = None,
     ) -> None:
-        """
-        Initialize the VectorDBClientWrapper.
-
-        Args:
-            url (str): The URL of the Qdrant server.
-            collection_name (str): The name of the collection to interact with.
-            api_key (Optional[str], optional): The API key for authentication. Defaults to None.
-        """
         self.collection_name = collection_name
 
         self.client = QdrantClient(
@@ -48,12 +26,6 @@ class VectorDBClientWrapper:
         )
 
     def collection_exists(self) -> bool:
-        """
-        Check whether the configured collection exists.
-
-        Returns:
-            bool: True if the collection exists, False otherwise.
-        """
         collections = self.client.get_collections()
 
         return any(
@@ -66,16 +38,6 @@ class VectorDBClientWrapper:
         vector_size: int,
         distance: Distance = Distance.COSINE,
     ) -> None:
-        """
-        Create the configured collection.
-
-        Args:
-            vector_size (int): The size of the vectors in the collection.
-            distance (Distance, optional): The distance metric to use for similarity search. Defaults to Distance.COSINE.
-        """
-        if self.collection_exists():
-            return
-
         self.client.create_collection(
             collection_name=self.collection_name,
             vectors_config=VectorParams(
@@ -84,13 +46,10 @@ class VectorDBClientWrapper:
             ),
         )
 
-    def upsert(self, points: List[PointStruct]) -> None:
-        """
-        Insert or update vectors and their payloads.
-
-        Args:
-            points (List[PointStruct]): The list of points to upsert.
-        """
+    def upsert(
+        self,
+        points: List[PointStruct],
+    ) -> None:
         self.client.upsert(
             collection_name=self.collection_name,
             points=points,
@@ -104,52 +63,83 @@ class VectorDBClientWrapper:
         query_filter: Optional[Any] = None,
     ) -> List[PointStruct]:
         """
-        Search for vectors similar to the query vector.
-
-        Args:
-            query_vector (List[float]): The query vector to search against.
-            limit (int, optional): The maximum number of results to return. Defaults to 5.
-            score_threshold (Optional[float], optional): The minimum score threshold for results. Defaults to None.
-            query_filter (Optional[Any], optional): A filter to apply to the search. Defaults to None.
-
-        Returns:
-            List[PointStruct]: A list of points similar to the query vector.
+        Semantic/vector search.
         """
-        return self.client.query_points(
+
+        response = self.client.query_points(
             collection_name=self.collection_name,
             query=query_vector,
             limit=limit,
             score_threshold=score_threshold,
             query_filter=query_filter,
-        ).points
-
-    def get_by_id(self, point_id: Any) -> Optional[PointStruct]:
-        """
-        Retrieve a point by its ID.
-
-        Args:
-            point_id (Any): The ID of the point to retrieve.
-
-        Returns:
-            Optional[PointStruct]: The point with the specified ID, or None if not found.
-        """
-        # TODO: Remove if redundant
-        result = self.client.retrieve(
-            collection_name=self.collection_name,
-            ids=[point_id],
+            with_payload=True,
         )
 
-        return result[0] if result else None
+        return response.points
 
-    def delete(self, point_ids: List[Any]) -> None:
+    def search_article(
+        self,
+        law_number: str,
+    ) -> List[PointStruct]:
         """
-        Delete points from the collection.
+        Exact article lookup.
 
-        Args:
-            point_ids (List[Any]): The list of IDs of the points to delete.
+        Example:
+
+            law_number = "مادة ١"
         """
-        # TODO: Remove if redundant
-        self.client.delete(
+
+        results, _ = self.client.scroll(
             collection_name=self.collection_name,
-            points_selector=point_ids,
+            scroll_filter=Filter(
+                must=[
+                    FieldCondition(
+                        key="law_number",
+                        match=MatchValue(
+                            value=law_number,
+                        ),
+                    )
+                ]
+            ),
+            limit=1,
+            with_payload=True,
+            with_vectors=False,
         )
+
+        return results
+
+    def get_all_documents(
+        self,
+    ) -> List[PointStruct]:
+        """
+        Retrieve all indexed documents.
+
+        Used for lexical retrieval.
+
+        This is intentionally kept separate from semantic
+        search because lexical retrieval works directly
+        against the article text.
+        """
+
+        all_points = []
+
+        offset = None
+
+        while True:
+
+            points, next_offset = self.client.scroll(
+                collection_name=self.collection_name,
+                limit=100,
+                offset=offset,
+                with_payload=True,
+                with_vectors=False,
+            )
+
+            all_points.extend(points)
+
+            if next_offset is None:
+                break
+
+            offset = next_offset
+
+        return all_points

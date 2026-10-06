@@ -11,15 +11,37 @@ class EmbeddingModel:
     """
 
     def __init__(self):
-        """
-        Initializes the EmbeddingModel with configurations from environment variables.
-        """
-        self.embedding_model = OpenAIEmbeddings(
-            base_url=os.getenv("EMBEDDING_MODEL_SERVER")
+        self.model_name = os.getenv(
+            "EMBEDDING_MODEL",
+            "Qwen/Qwen3-Embedding-0.6B",
+        )
+
+        self.server = os.getenv(
+            "EMBEDDING_MODEL_SERVER",
+            "http://localhost",
+        )
+
+        self.server_port = os.getenv(
+            "EMBEDDING_MODEL_SERVER_PORT",
+            "8001",
+        )
+
+        self.api_key = os.getenv(
+            "EMBEDDING_MODEL_API_KEY",
+            "dumb",
+        )
+
+        self.base_url=(
+            os.getenv("EMBEDDING_MODEL_SERVER")
             + ":"
-            + os.getenv("EMBEDDING_MODEL_SERVER_PORT"),
-            api_key=os.getenv("EMBEDDING_MODEL_API_KEY"),
-            model=os.getenv("EMBEDDING_MODEL"),
+            + os.getenv("EMBEDDING_MODEL_SERVER_PORT")
+            + "/v1"
+        )
+
+        self.embedding_model = OpenAIEmbeddings(
+            base_url=self.base_url,
+            api_key=self.api_key,
+            model=self.model_name,
         )
 
     def embed(self, query: str) -> list:
