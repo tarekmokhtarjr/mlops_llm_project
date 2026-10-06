@@ -6,6 +6,7 @@ from dotenv import load_dotenv
 from app.clients.vector_db_client import VectorDBClientWrapper
 from app.models.embedding import EmbeddingModel
 from app.services.rag import RAG, serialize_result
+from app.models.guard import GuardModel
 
 
 load_dotenv()
@@ -30,10 +31,16 @@ def get_vector_db():
 
 
 @st.cache_resource
+def get_guard_model():
+    return GuardModel()
+
+
+@st.cache_resource
 def get_rag():
     return RAG(
         embedding_model=get_embedding_model(),
         vector_db=get_vector_db(),
+        guard_model=get_guard_model(),
         retrieval_limit=5,
     )
 
