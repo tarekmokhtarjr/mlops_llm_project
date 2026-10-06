@@ -5,8 +5,8 @@ from dotenv import load_dotenv
 
 from app.clients.vector_db_client import VectorDBClientWrapper
 from app.models.embedding import EmbeddingModel
-from app.services.rag import RAG, serialize_result
 from app.models.guard import GuardModel
+from app.services.rag import RAG, serialize_result
 
 
 load_dotenv()
@@ -23,16 +23,16 @@ def get_embedding_model():
 
 
 @st.cache_resource
+def get_guard_model():
+    return GuardModel()
+
+
+@st.cache_resource
 def get_vector_db():
     return VectorDBClientWrapper(
         url=f"http://{QDRANT_HOST}:{QDRANT_PORT}",
         collection_name=QDRANT_COLLECTION,
     )
-
-
-@st.cache_resource
-def get_guard_model():
-    return GuardModel()
 
 
 @st.cache_resource
@@ -73,12 +73,12 @@ def render_message(message):
 
 def main():
     st.set_page_config(
-        page_title="Egyptian Civil Code RAG",
+        page_title="Egyptian Civil Code",
         page_icon="⚖️",
         layout="wide",
     )
 
-    st.title("Egyptian Civil Code RAG")
+    st.title("Egyptian Civil Code")
 
     if "messages" not in st.session_state:
         st.session_state.messages = []
@@ -93,7 +93,6 @@ def main():
             st.session_state.messages = []
             st.rerun()
 
-    # Render previous conversation
     for message in st.session_state.messages:
         render_message(message)
 
@@ -104,7 +103,10 @@ def main():
     if not query:
         return
 
-    # Store and display user message
+    # ---------------------------------------------------------
+    # User message
+    # ---------------------------------------------------------
+
     user_message = {
         "role": "user",
         "content": query,
@@ -115,47 +117,84 @@ def main():
     with st.chat_message("user"):
         st.markdown(query)
 
-    # Run RAG
+    # ---------------------------------------------------------
+    # RAG
+    # ---------------------------------------------------------
+
     rag = get_rag()
 
-    with st.spinner("Searching the Egyptian Civil Code..."):
+    with st.spinner(
+        "Checking request and searching the "
+        "Egyptian Civil Code..."
+    ):
         response = rag.retrieve_legal_documents(query)
 
-    serialized_results = [
-        serialize_result(result)
-        for result in response.results
-    ]
+    # ---------------------------------------------------------
+    # Handle rejected request
+    # ---------------------------------------------------------
 
-    # Build assistant response
-    if not serialized_results:
-        assistant_content = (
-            "No relevant legal articles were found."
-        )
+    if not response.accepted:
+        if response.search_type == "guard_rejected_input":
+            assistant_content = (
+                "I can't assist with that request."
+            )
 
-    elif response.search_type == "exact_article":
-        assistant_content = (
-            f"Found Article {response.article_number}."
-        )
+        elif response.search_type == "guard_rejected_context":
+            assistant_content = (
+                "The retrieved content could not be "
+                "safely used for this request."
+            )
+
+        else:
+            assistant_content = (
+                "The request could not be processed safely."
+            )
+
+        serialized_results = []
+
+    # ---------------------------------------------------------
+    # Handle accepted request
+    # ---------------------------------------------------------
 
     else:
-        assistant_content = (
-            "Relevant legal articles were found."
-        )
+        serialized_results = [
+            serialize_result(result)
+            for result in response.results
+        ]
 
-    # Store complete assistant message.
-    # Retrieval results belong to this specific message,
-    # so they survive Streamlit reruns.
+        if not serialized_results:
+            assistant_content = (
+                "No relevant legal articles were found."
+            )
+
+        elif response.search_type == "exact_article":
+            assistant_content = (
+                f"Found Article "
+                f"{response.article_number}."
+            )
+
+        else:
+            assistant_content = (
+                "Relevant legal articles were found."
+            )
+
+    # ---------------------------------------------------------
+    # Assistant message
+    # ---------------------------------------------------------
+
     assistant_message = {
         "role": "assistant",
         "content": assistant_content,
         "results": serialized_results,
         "search_type": response.search_type,
         "article_number": response.article_number,
+        "accepted": response.accepted,
     }
 
-    st.session_state.messages.append(assistant_message)
+    st.session_state.messages.append(
+        assistant_message
+    )
 
-    # Rerender the complete conversation from session state.
     st.rerun()
 
 
