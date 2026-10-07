@@ -45,9 +45,11 @@ class GuardModel:
             "http://localhost",
         )
 
+        # Internal Docker/service port.
+        # Do NOT use GUARD_PORT_HOST here.
         self.server_port = os.getenv(
-            "GUARD_PORT_HOST",
-            "8002",
+            "GUARD_MODEL_SERVER_PORT",
+            "8000",
         )
 
         self.api_key = os.getenv(
@@ -67,16 +69,8 @@ class GuardModel:
             temperature=0,
         )
 
-    # ---------------------------------------------------------
-    # Prompt
-    # ---------------------------------------------------------
-
     def _input_prompt(self, query: str) -> str:
         return query
-
-    # ---------------------------------------------------------
-    # JSON / text parser
-    # ---------------------------------------------------------
 
     def _parse_json(
         self,
@@ -95,10 +89,7 @@ class GuardModel:
             content,
         )
 
-        # -----------------------------------------------------
         # 1. Proper JSON
-        # -----------------------------------------------------
-
         try:
             data = json.loads(content)
 
@@ -122,10 +113,7 @@ class GuardModel:
         ):
             pass
 
-        # -----------------------------------------------------
         # 2. JSON embedded inside other text
-        # -----------------------------------------------------
-
         json_match = re.search(
             r"\{.*\}",
             content,
@@ -157,15 +145,7 @@ class GuardModel:
             ):
                 pass
 
-        # -----------------------------------------------------
         # 3. Native Qwen3Guard format
-        #
-        # Example:
-        #
-        # Safety: Unsafe
-        # Categories: Violent
-        # -----------------------------------------------------
-
         safety_match = re.search(
             r"Safety\s*:\s*"
             r"(Safe|Unsafe|Controversial)",
@@ -210,18 +190,10 @@ class GuardModel:
                 refusal=refusal,
             )
 
-        # -----------------------------------------------------
-        # Unsupported response
-        # -----------------------------------------------------
-
         raise ValueError(
             "Unable to parse Qwen3Guard response: "
             f"{content!r}"
         )
-
-    # ---------------------------------------------------------
-    # Invoke model
-    # ---------------------------------------------------------
 
     def _invoke(
         self,
@@ -249,19 +221,11 @@ class GuardModel:
             str(content)
         )
 
-    # ---------------------------------------------------------
-    # Input guard
-    # ---------------------------------------------------------
-
     def check_input(
         self,
         query: str,
     ) -> GuardResult:
         return self._invoke(query)
-
-    # ---------------------------------------------------------
-    # Context guard
-    # ---------------------------------------------------------
 
     def check_context(
         self,
@@ -298,10 +262,6 @@ Do not explain your decision.
 """
 
         return self._invoke(prompt)
-
-    # ---------------------------------------------------------
-    # Output guard
-    # ---------------------------------------------------------
 
     def check_output(
         self,

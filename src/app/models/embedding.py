@@ -23,7 +23,7 @@ class EmbeddingModel:
 
         self.server_port = os.getenv(
             "EMBEDDING_MODEL_SERVER_PORT",
-            "8001",
+            "8000",
         )
 
         self.api_key = os.getenv(
