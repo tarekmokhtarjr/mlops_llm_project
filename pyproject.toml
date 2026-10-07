@@ -11,6 +11,7 @@ dependencies = [
     "guardrails-ai>=0.11.0",
     "langchain-openai>=1.6.3",
     "lxml>=6.1.2",
+    "mlflow>=3.17.0",
     "pymupdf>=1.28.2",
     "qdrant-client>=1.19.0",
     "rank-bm25>=0.2.2",

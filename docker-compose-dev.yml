@@ -12,6 +12,28 @@ services:
     networks:
       - rag-net
 
+  mlflow:
+    image: ghcr.io/mlflow/mlflow:v3.5.0
+    container_name: mlflow
+    restart: unless-stopped
+    ports:
+      - "${MLFLOW_PORT}:${MLFLOW_PORT}"
+    volumes:
+      - mlflow_data:/mlruns
+    command:
+      - mlflow
+      - server
+      - --host
+      - "0.0.0.0"
+      - --port
+      - "${MLFLOW_PORT}"
+      - --backend-store-uri
+      - "${MLFLOW_BACKEND_STORE_URI}"
+      - --default-artifact-root
+      - "${MLFLOW_ARTIFACT_LOCATION}"
+    networks:
+      - rag-net
+
   rag-app:
     build:
       context: .
@@ -62,7 +84,6 @@ services:
     networks:
       - rag-net
 
-# Increasing docker memory usage to at least 16 GB is important
   embedding:
     image: vllm/vllm-openai-cpu:v0.29.0
     container_name: qwen3-embedding
@@ -130,8 +151,12 @@ services:
 volumes:
   qdrant_storage:
     name: rag_qdrant_storage
+
   hf_cache:
     name: rag_hf_cache
+
+  mlflow_data:
+    name: rag_mlflow_data
 
 networks:
   rag-net:
