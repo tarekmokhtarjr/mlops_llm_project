@@ -13,7 +13,7 @@ services:
       - rag-net
 
   mlflow:
-    image: ghcr.io/mlflow/mlflow:v3.5.0
+    image: ghcr.io/mlflow/mlflow:v3.17.0
     container_name: mlflow
     restart: unless-stopped
     ports:

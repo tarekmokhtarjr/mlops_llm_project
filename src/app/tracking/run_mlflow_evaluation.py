@@ -12,7 +12,7 @@ import mlflow
 from dotenv import load_dotenv
 
 from app.clients.vector_db_client import VectorDBClientWrapper
-from .mlflow_metrics import (
+from app.tracking.mlflow_metrics import (
     aggregate_retrieval_metrics,
     calculate_retrieval_metrics,
     average,
