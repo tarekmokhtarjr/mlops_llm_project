@@ -11,6 +11,25 @@ services:
       - qdrant_storage:/qdrant/storage
     networks:
       - rag-net
+
+  rag-app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: rag-app
+    env_file:
+      - .env
+    ports:
+      - "${STREAMLIT_PORT}:${STREAMLIT_PORT}"
+    command:
+      - sh
+      - -c
+      - >
+        uv run streamlit run ${STREAMLIT_APP_PATH}
+        --server.address=${STREAMLIT_URL}
+        --server.port=${STREAMLIT_PORT}
+    restart: unless-stopped
+
   llm_guard:
     image: vllm/vllm-openai-cpu:v0.29.0
     container_name: qwen3-guard
