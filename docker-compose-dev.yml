@@ -31,6 +31,8 @@ services:
       - "${MLFLOW_BACKEND_STORE_URI}"
       - --default-artifact-root
       - "${MLFLOW_ARTIFACT_LOCATION}"
+      - --allowed-hosts
+      - "${MLFLOW_ALLOWED_HOSTS}"
     networks:
       - rag-net
 
