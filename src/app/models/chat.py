@@ -2,12 +2,14 @@ from dotenv import load_dotenv
 from langchain_openai import ChatOpenAI
 import os
 
+
 load_dotenv()
 
 
 class ChatBotLlmModel:
     """
-    Represents a chatbot using OpenAI's ChatOpenAI model.
+    Chatbot LLM backed by the OpenAI-compatible
+    vLLM server running in the llm container.
     """
 
     def __init__(self):
@@ -15,21 +17,26 @@ class ChatBotLlmModel:
             "CHATBOT_MODEL",
             "Qwen/Qwen2.5-0.5B-Instruct",
         )
+
         self.server = os.getenv(
             "CHATBOT_SERVER",
             "http://localhost",
         )
+
         self.server_port = os.getenv(
             "CHATBOT_SERVER_PORT",
             "8000",
         )
+
         self.api_key = os.getenv(
             "CHATBOT_API_KEY",
             "dumb",
         )
+
         self.base_url = (
             f"{self.server}:{self.server_port}/v1"
         )
+
         self.chatbot_llm = ChatOpenAI(
             model=self.model_name,
             base_url=self.base_url,
@@ -39,13 +46,17 @@ class ChatBotLlmModel:
 
     def invoke(self, prompt: str) -> str:
         """
-        Invokes the model with the given prompt and returns the response content.
+        Generate an answer from the LLM.
 
         Args:
-            prompt (str): The input prompt for the model.
+            prompt: Prompt sent to the chatbot model.
 
         Returns:
-            str: The content of the model's response.
+            Generated answer as a string.
         """
-        response = self.chatbot_llm.invoke(prompt)
-        return response.content
+
+        response = self.chatbot_llm.invoke(
+            prompt
+        )
+
+        return str(response.content)

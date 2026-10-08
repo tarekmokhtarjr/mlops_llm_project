@@ -3,6 +3,7 @@ from dataclasses import dataclass
 from typing import Any, List, Optional
 
 from ..clients.vector_db_client import VectorDBClientWrapper
+from ..models.chat import ChatBotLlmModel
 from ..models.embedding import EmbeddingModel
 from ..models.guard import GuardModel, GuardResult
 from .retrieval import hybrid_search, lexical_search
@@ -48,8 +49,13 @@ def extract_article_number(query: str) -> Optional[int]:
     return None
 
 
-def article_number_to_law_number(article_number: int) -> str:
-    arabic_number = str(article_number).translate(
+def article_number_to_law_number(
+    article_number: int,
+) -> str:
+
+    arabic_number = str(
+        article_number
+    ).translate(
         WESTERN_TO_ARABIC
     )
 
@@ -70,30 +76,45 @@ class RAGRetrievalResult:
 
 
 class RAG:
+
     def __init__(
         self,
         embedding_model: EmbeddingModel,
         vector_db: VectorDBClientWrapper,
         guard_model: GuardModel,
+        chat_model: ChatBotLlmModel,
         retrieval_limit: int = 5,
     ):
         self.embedding_model = embedding_model
         self.vector_db = vector_db
         self.guard_model = guard_model
+        self.chat_model = chat_model
         self.retrieval_limit = retrieval_limit
 
     def _build_context(
         self,
         results: List[Any],
     ) -> str:
+
         context_parts = []
 
-        for index, result in enumerate(results, start=1):
+        for index, result in enumerate(
+            results,
+            start=1,
+        ):
             payload = result.payload or {}
 
-            law_number = payload.get("law_number")
-            title = payload.get("title")
-            content = payload.get("content")
+            law_number = payload.get(
+                "law_number"
+            )
+
+            title = payload.get(
+                "title"
+            )
+
+            content = payload.get(
+                "content"
+            )
 
             context_parts.append(
                 f"[Document {index}]\n"
@@ -102,7 +123,9 @@ class RAG:
                 f"{content}"
             )
 
-        return "\n\n".join(context_parts)
+        return "\n\n".join(
+            context_parts
+        )
 
     def retrieve_legal_documents(
         self,
@@ -122,15 +145,13 @@ class RAG:
 
         # ---------------------------------------------------------
         # 1. INPUT GUARD
-        #
-        # This MUST happen before:
-        # - Embedding
-        # - Qdrant
-        # - BM25
-        # - RRF
         # ---------------------------------------------------------
 
-        input_guard = self.guard_model.check_input(query)
+        input_guard = (
+            self.guard_model.check_input(
+                query
+            )
+        )
 
         if not input_guard.accepted:
             return RAGRetrievalResult(
@@ -147,21 +168,33 @@ class RAG:
         # 2. RETRIEVAL
         # ---------------------------------------------------------
 
-        limit = limit or self.retrieval_limit
+        limit = (
+            limit
+            or self.retrieval_limit
+        )
 
-        article_number = extract_article_number(query)
+        article_number = (
+            extract_article_number(
+                query
+            )
+        )
 
         # ---------------------------------------------------------
         # 2a. Exact article lookup
         # ---------------------------------------------------------
 
         if article_number is not None:
-            law_number = article_number_to_law_number(
-                article_number
+
+            law_number = (
+                article_number_to_law_number(
+                    article_number
+                )
             )
 
-            results = self.vector_db.search_article(
-                law_number=law_number
+            results = (
+                self.vector_db.search_article(
+                    law_number=law_number
+                )
             )
 
             search_type = "exact_article"
@@ -171,8 +204,11 @@ class RAG:
         # ---------------------------------------------------------
 
         else:
-            query_embedding = self.embedding_model.embed(
-                query
+
+            query_embedding = (
+                self.embedding_model.embed(
+                    query
+                )
             )
 
             semantic_limit = max(
@@ -180,17 +216,23 @@ class RAG:
                 20,
             )
 
-            semantic_results = self.vector_db.search(
-                query_vector=query_embedding,
-                limit=semantic_limit,
+            semantic_results = (
+                self.vector_db.search(
+                    query_vector=query_embedding,
+                    limit=semantic_limit,
+                )
             )
 
-            documents = self.vector_db.get_all_documents()
+            documents = (
+                self.vector_db.get_all_documents()
+            )
 
-            lexical_results = lexical_search(
-                query=query,
-                documents=documents,
-                limit=semantic_limit,
+            lexical_results = (
+                lexical_search(
+                    query=query,
+                    documents=documents,
+                    limit=semantic_limit,
+                )
             )
 
             results = hybrid_search(
@@ -207,6 +249,7 @@ class RAG:
         # ---------------------------------------------------------
 
         if not results:
+
             return RAGRetrievalResult(
                 results=[],
                 search_type=search_type,
@@ -219,18 +262,23 @@ class RAG:
         # 4. Build context
         # ---------------------------------------------------------
 
-        context = self._build_context(results)
+        context = self._build_context(
+            results
+        )
 
         # ---------------------------------------------------------
         # 5. CONTEXT GUARD
         # ---------------------------------------------------------
 
-        context_guard = self.guard_model.check_context(
-            query=query,
-            context=context,
+        context_guard = (
+            self.guard_model.check_context(
+                query=query,
+                context=context,
+            )
         )
 
         if not context_guard.accepted:
+
             return RAGRetrievalResult(
                 results=[],
                 search_type="guard_rejected_context",
@@ -257,13 +305,112 @@ class RAG:
             context_guard=context_guard,
         )
 
+    def _build_prompt(
+        self,
+        query: str,
+        context: str,
+    ) -> str:
 
-def serialize_result(result: Any) -> dict:
+        return f"""
+You are a legal information assistant.
+
+Answer the user's question using ONLY the
+provided Egyptian Civil Code context.
+
+Do not invent legal provisions or facts.
+
+If the context does not contain enough
+information to answer the question, say:
+
+"لا تتوفر معلومات كافية في السياق المسترجع
+للإجابة عن هذا السؤال."
+
+When relevant, mention the article number
+that supports your answer.
+
+User question:
+{query}
+
+Retrieved context:
+<context>
+{context}
+</context>
+
+Answer:
+""".strip()
+
+    def answer(
+        self,
+        query: str,
+    ) -> str:
+
+        # ---------------------------------------------------------
+        # 1. Retrieve and guard context
+        # ---------------------------------------------------------
+
+        retrieval = (
+            self.retrieve_legal_documents(
+                query
+            )
+        )
+
+        if not retrieval.accepted:
+            return (
+                retrieval.refusal_reason
+                or "Unable to process the request."
+            )
+
+        if not retrieval.results:
+            return (
+                "لم يتم العثور على سياق قانوني "
+                "مناسب للإجابة عن السؤال."
+            )
+
+        # ---------------------------------------------------------
+        # 2. Build context
+        # ---------------------------------------------------------
+
+        context = self._build_context(
+            retrieval.results
+        )
+
+        # ---------------------------------------------------------
+        # 3. Build LLM prompt
+        # ---------------------------------------------------------
+
+        prompt = self._build_prompt(
+            query=query,
+            context=context,
+        )
+
+        # ---------------------------------------------------------
+        # 4. Generate answer
+        # ---------------------------------------------------------
+
+        return self.chat_model.invoke(
+            prompt
+        )
+
+
+def serialize_result(
+    result: Any,
+) -> dict:
+
     payload = result.payload or {}
 
     return {
-        "law_number": payload.get("law_number"),
-        "title": payload.get("title"),
-        "content": payload.get("content"),
-        "score": getattr(result, "score", None),
+        "law_number": payload.get(
+            "law_number"
+        ),
+        "title": payload.get(
+            "title"
+        ),
+        "content": payload.get(
+            "content"
+        ),
+        "score": getattr(
+            result,
+            "score",
+            None,
+        ),
     }

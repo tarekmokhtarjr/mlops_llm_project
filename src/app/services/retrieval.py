@@ -153,109 +153,76 @@ def tokenize_arabic(
 
 def lexical_search(
     query: str,
-    documents: List[Any],
+    documents: list,
     limit: int = 20,
-) -> List[Dict[str, Any]]:
+) -> list:
     """
-    Lexical retrieval using BM25.
+    BM25 lexical retrieval over article number, title and content.
 
-    BM25 is applied to the article CONTENT.
-
-    The title is intentionally not used here because
-    the legal article content is the primary retrieval text.
+    Including metadata is important for legal retrieval because the title
+    contains structural/legal concepts that may not appear verbatim in
+    the article body.
     """
 
     if not documents:
         return []
 
-    query_tokens = tokenize_arabic(
-        query
-    )
-
-    if not query_tokens:
-        return []
-
-    # --------------------------------------------------------
-    # Build BM25 corpus
-    # --------------------------------------------------------
+    normalized_query = normalize_arabic_text(query)
 
     corpus = []
 
     for document in documents:
+        payload = document.payload or {}
 
-        payload = (
-            document.payload
-            or {}
+        law_number = str(payload.get("law_number", ""))
+        title = str(payload.get("title", ""))
+        content = str(payload.get("content", ""))
+
+        # Give BM25 access to the article metadata as well as its text.
+        searchable_text = " ".join(
+            [
+                law_number,
+                title,
+                content,
+            ]
         )
 
-        content = payload.get(
-            "content",
-            "",
-        )
+        normalized_text = normalize_arabic_text(searchable_text)
 
-        tokens = tokenize_arabic(
-            content
-        )
+        corpus.append(normalized_text.split())
 
-        corpus.append(
-            tokens
-        )
+    tokenized_query = normalized_query.split()
 
-    # --------------------------------------------------------
-    # Build BM25 index
-    # --------------------------------------------------------
+    if not tokenized_query:
+        return []
 
-    bm25 = BM25Okapi(
-        corpus
-    )
+    bm25 = BM25Okapi(corpus)
 
-    # --------------------------------------------------------
-    # Calculate BM25 scores
-    # --------------------------------------------------------
+    scores = bm25.get_scores(tokenized_query)
 
-    scores = bm25.get_scores(
-        query_tokens
-    )
-
-    # --------------------------------------------------------
-    # Rank documents
-    # --------------------------------------------------------
-
-    ranked_indices = sorted(
-        range(
-            len(scores)
-        ),
+    ranked_indexes = sorted(
+        range(len(documents)),
         key=lambda index: scores[index],
         reverse=True,
     )
 
     results = []
 
-    for index in ranked_indices:
+    for index in ranked_indexes[:limit]:
+        score = float(scores[index])
 
-        score = float(
-            scores[index]
-        )
-
-        # BM25 scores can be zero.
-        # We don't need to return irrelevant
-        # zero-score documents.
+        # Keep the existing behaviour of ignoring zero-score documents.
         if score <= 0:
             continue
 
         results.append(
-            {
-                "document": documents[index],
-                "score": score,
-                "rank": len(results) + 1,
-            }
+            RetrievalResult(
+                document=documents[index],
+                score=score,
+            )
         )
 
-        if len(results) >= limit:
-            break
-
     return results
-
 
 # ============================================================
 # Reciprocal Rank Fusion
