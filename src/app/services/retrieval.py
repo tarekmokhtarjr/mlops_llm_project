@@ -156,18 +156,13 @@ def lexical_search(
     documents: list,
     limit: int = 20,
 ) -> list:
-    """
-    BM25 lexical retrieval over article number, title and content.
-
-    Including metadata is important for legal retrieval because the title
-    contains structural/legal concepts that may not appear verbatim in
-    the article body.
-    """
-
     if not documents:
         return []
 
-    normalized_query = normalize_arabic_text(query)
+    tokenized_query = tokenize_arabic(query)
+
+    if not tokenized_query:
+        return []
 
     corpus = []
 
@@ -178,7 +173,6 @@ def lexical_search(
         title = str(payload.get("title", ""))
         content = str(payload.get("content", ""))
 
-        # Give BM25 access to the article metadata as well as its text.
         searchable_text = " ".join(
             [
                 law_number,
@@ -187,14 +181,7 @@ def lexical_search(
             ]
         )
 
-        normalized_text = normalize_arabic_text(searchable_text)
-
-        corpus.append(normalized_text.split())
-
-    tokenized_query = normalized_query.split()
-
-    if not tokenized_query:
-        return []
+        corpus.append(tokenize_arabic(searchable_text))
 
     bm25 = BM25Okapi(corpus)
 
@@ -211,7 +198,6 @@ def lexical_search(
     for index in ranked_indexes[:limit]:
         score = float(scores[index])
 
-        # Keep the existing behaviour of ignoring zero-score documents.
         if score <= 0:
             continue
 
@@ -448,48 +434,33 @@ class RetrievalResult:
 def hybrid_search(
     query: str,
     semantic_results: List[Any],
-    lexical_results: List[Dict[str, Any]],
+    lexical_results: List[RetrievalResult],
     limit: int = 5,
 ) -> List[RetrievalResult]:
-    """
-    Combine:
-
-        Qdrant semantic retrieval
-        +
-        BM25 lexical retrieval
-
-    using Reciprocal Rank Fusion.
-    """
-
-    # --------------------------------------------------------
-    # Convert Qdrant semantic results to ranked format
-    # --------------------------------------------------------
-
     semantic_ranked = []
 
-    for rank, document in enumerate(
-        semantic_results,
-        start=1,
-    ):
-
+    for rank, document in enumerate(semantic_results, start=1):
         semantic_ranked.append(
             {
                 "document": document,
-                "score": getattr(
-                    document,
-                    "score",
-                    0.0,
-                ),
+                "score": getattr(document, "score", 0.0),
                 "rank": rank,
             }
         )
 
-    # --------------------------------------------------------
-    # Fuse rankings
-    # --------------------------------------------------------
+    lexical_ranked = []
+
+    for rank, result in enumerate(lexical_results, start=1):
+        lexical_ranked.append(
+            {
+                "document": result.document,
+                "score": result.score,
+                "rank": rank,
+            }
+        )
 
     return reciprocal_rank_fusion(
         semantic_results=semantic_ranked,
-        lexical_results=lexical_results,
+        lexical_results=lexical_ranked,
         limit=limit,
     )
