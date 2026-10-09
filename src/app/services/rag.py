@@ -24,11 +24,17 @@ WESTERN_TO_ARABIC = str.maketrans(
 
 
 def normalize_digits(text: str) -> str:
-    return text.translate(ARABIC_TO_WESTERN)
+    return text.translate(
+        ARABIC_TO_WESTERN
+    )
 
 
-def extract_article_number(query: str) -> Optional[int]:
-    normalized_query = normalize_digits(query)
+def extract_article_number(
+    query: str,
+) -> Optional[int]:
+    normalized_query = normalize_digits(
+        query
+    )
 
     patterns = [
         r"المادة\s*(\d+)",
@@ -44,7 +50,9 @@ def extract_article_number(query: str) -> Optional[int]:
         )
 
         if match:
-            return int(match.group(1))
+            return int(
+                match.group(1)
+            )
 
     return None
 
@@ -52,7 +60,6 @@ def extract_article_number(query: str) -> Optional[int]:
 def article_number_to_law_number(
     article_number: int,
 ) -> str:
-
     arabic_number = str(
         article_number
     ).translate(
@@ -83,7 +90,7 @@ class RAG:
         vector_db: VectorDBClientWrapper,
         guard_model: GuardModel,
         chat_model: ChatBotLlmModel,
-        retrieval_limit: int = 5,
+        retrieval_limit: int = 10,
     ):
         self.embedding_model = embedding_model
         self.vector_db = vector_db
@@ -91,11 +98,14 @@ class RAG:
         self.chat_model = chat_model
         self.retrieval_limit = retrieval_limit
 
+    # ========================================================
+    # Context construction
+    # ========================================================
+
     def _build_context(
         self,
         results: List[Any],
     ) -> str:
-
         context_parts = []
 
         for index, result in enumerate(
@@ -104,28 +114,43 @@ class RAG:
         ):
             payload = result.payload or {}
 
-            law_number = payload.get(
-                "law_number"
+            law_number = str(
+                payload.get(
+                    "law_number",
+                    "",
+                )
             )
 
-            title = payload.get(
-                "title"
+            title = str(
+                payload.get(
+                    "title",
+                    "",
+                )
             )
 
-            content = payload.get(
-                "content"
+            content = str(
+                payload.get(
+                    "content",
+                    "",
+                )
             )
 
             context_parts.append(
-                f"[Document {index}]\n"
+                f"[LEGAL_DOCUMENT_{index}]\n"
                 f"Article: {law_number}\n"
-                f"Location: {title}\n\n"
-                f"{content}"
+                f"Legal hierarchy: {title}\n"
+                f"Text:\n"
+                f"{content}\n"
+                f"[END_LEGAL_DOCUMENT_{index}]"
             )
 
         return "\n\n".join(
             context_parts
         )
+
+    # ========================================================
+    # Retrieval
+    # ========================================================
 
     def retrieve_legal_documents(
         self,
@@ -133,9 +158,9 @@ class RAG:
         limit: Optional[int] = None,
     ) -> RAGRetrievalResult:
 
-        # ---------------------------------------------------------
+        # ----------------------------------------------------
         # 0. Empty query
-        # ---------------------------------------------------------
+        # ----------------------------------------------------
 
         if not query or not query.strip():
             return RAGRetrievalResult(
@@ -143,9 +168,9 @@ class RAG:
                 search_type="empty",
             )
 
-        # ---------------------------------------------------------
-        # 1. INPUT GUARD
-        # ---------------------------------------------------------
+        # ----------------------------------------------------
+        # 1. Input guard
+        # ----------------------------------------------------
 
         input_guard = (
             self.guard_model.check_input(
@@ -164,13 +189,14 @@ class RAG:
                 input_guard=input_guard,
             )
 
-        # ---------------------------------------------------------
-        # 2. RETRIEVAL
-        # ---------------------------------------------------------
+        # ----------------------------------------------------
+        # 2. Retrieval configuration
+        # ----------------------------------------------------
 
         limit = (
             limit
-            or self.retrieval_limit
+            if limit is not None
+            else self.retrieval_limit
         )
 
         article_number = (
@@ -179,12 +205,11 @@ class RAG:
             )
         )
 
-        # ---------------------------------------------------------
+        # ----------------------------------------------------
         # 2a. Exact article lookup
-        # ---------------------------------------------------------
+        # ----------------------------------------------------
 
         if article_number is not None:
-
             law_number = (
                 article_number_to_law_number(
                     article_number
@@ -199,20 +224,21 @@ class RAG:
 
             search_type = "exact_article"
 
-        # ---------------------------------------------------------
+        # ----------------------------------------------------
         # 2b. Hybrid retrieval
-        # ---------------------------------------------------------
+        # ----------------------------------------------------
 
         else:
-
             query_embedding = (
                 self.embedding_model.embed(
                     query
                 )
             )
 
+            # Retrieve a larger candidate set from both
+            # retrieval methods before RRF.
             semantic_limit = max(
-                limit * 4,
+                limit * 2,
                 20,
             )
 
@@ -223,6 +249,7 @@ class RAG:
                 )
             )
 
+            # BM25 searches the complete collection.
             documents = (
                 self.vector_db.get_all_documents()
             )
@@ -244,12 +271,11 @@ class RAG:
 
             search_type = "hybrid"
 
-        # ---------------------------------------------------------
+        # ----------------------------------------------------
         # 3. No results
-        # ---------------------------------------------------------
+        # ----------------------------------------------------
 
         if not results:
-
             return RAGRetrievalResult(
                 results=[],
                 search_type=search_type,
@@ -258,17 +284,17 @@ class RAG:
                 input_guard=input_guard,
             )
 
-        # ---------------------------------------------------------
+        # ----------------------------------------------------
         # 4. Build context
-        # ---------------------------------------------------------
+        # ----------------------------------------------------
 
         context = self._build_context(
             results
         )
 
-        # ---------------------------------------------------------
-        # 5. CONTEXT GUARD
-        # ---------------------------------------------------------
+        # ----------------------------------------------------
+        # 5. Context guard
+        # ----------------------------------------------------
 
         context_guard = (
             self.guard_model.check_context(
@@ -278,7 +304,6 @@ class RAG:
         )
 
         if not context_guard.accepted:
-
             return RAGRetrievalResult(
                 results=[],
                 search_type="guard_rejected_context",
@@ -292,9 +317,9 @@ class RAG:
                 context_guard=context_guard,
             )
 
-        # ---------------------------------------------------------
+        # ----------------------------------------------------
         # 6. Successful retrieval
-        # ---------------------------------------------------------
+        # ----------------------------------------------------
 
         return RAGRetrievalResult(
             results=results,
@@ -305,6 +330,10 @@ class RAG:
             context_guard=context_guard,
         )
 
+    # ========================================================
+    # Grounded generation prompt
+    # ========================================================
+
     def _build_prompt(
         self,
         query: str,
@@ -312,41 +341,59 @@ class RAG:
     ) -> str:
 
         return f"""
-You are a legal information assistant.
+أنت مساعد قانوني متخصص في القانون المدني المصري.
 
-Answer the user's question using ONLY the
-provided Egyptian Civil Code context.
+مهمتك هي الإجابة عن سؤال المستخدم باستخدام المعلومات
+الواردة في المستندات القانونية المسترجعة فقط.
 
-Do not invent legal provisions or facts.
+قواعد إلزامية:
 
-If the context does not contain enough
-information to answer the question, say:
+1. استخدم فقط المعلومات الموجودة في السياق.
+2. لا تستخدم معلومات من معرفتك العامة أو من خارج السياق.
+3. لا تخترع أي حكم قانوني أو شرط أو مادة قانونية.
+4. لا تنسب إلى القانون نصاً غير موجود في المستندات.
+5. كل نتيجة أو قاعدة قانونية في الإجابة يجب أن تكون مدعومة
+   بمستند واحد أو أكثر من المستندات المسترجعة.
+6. اذكر رقم المادة عند الاستناد إلى نص قانوني.
+7. إذا كانت المستندات لا تحتوي على معلومات كافية للإجابة،
+   قل بوضوح:
+   "لا تتوفر معلومات كافية في السياق المسترجع للإجابة
+   عن هذا السؤال بشكل كامل."
+8. لا تغيّر موضوع السؤال.
+9. لا تضف أمثلة أو نصائح من خارج السياق.
+10. إذا كانت بعض المستندات غير مرتبطة مباشرة بالسؤال،
+    تجاهلها ولا تحاول استخدامها لإكمال الإجابة.
+11. لا تخمّن أو تستنتج قاعدة قانونية غير مذكورة صراحةً
+    في المستندات.
+12. لا تذكر معلومات طبية أو تجارية أو جنائية أو أي موضوع
+    آخر غير متعلق بالسؤال إلا إذا ورد صراحةً في السياق.
+13. فضّل إعادة صياغة النص القانوني الموجود في المستندات
+    بدلاً من إنشاء شرح قانوني من خارجها.
 
-"لا تتوفر معلومات كافية في السياق المسترجع
-للإجابة عن هذا السؤال."
-
-When relevant, mention the article number
-that supports your answer.
-
-User question:
+السؤال:
 {query}
 
-Retrieved context:
+المستندات القانونية المسترجعة:
 <context>
 {context}
 </context>
 
-Answer:
+أجب باللغة العربية.
+
+قبل تقديم الإجابة، تحقق داخلياً من أن كل قاعدة قانونية
+ذكرتها مدعومة فعلاً بالنص الموجود في السياق.
+
+إذا لم يكن السياق كافياً، لا تخمّن.
 """.strip()
+
+    # ========================================================
+    # Answer generation
+    # ========================================================
 
     def answer(
         self,
         query: str,
     ) -> str:
-
-        # ---------------------------------------------------------
-        # 1. Retrieve and guard context
-        # ---------------------------------------------------------
 
         retrieval = (
             self.retrieve_legal_documents(
@@ -366,36 +413,29 @@ Answer:
                 "مناسب للإجابة عن السؤال."
             )
 
-        # ---------------------------------------------------------
-        # 2. Build context
-        # ---------------------------------------------------------
-
         context = self._build_context(
             retrieval.results
         )
-
-        # ---------------------------------------------------------
-        # 3. Build LLM prompt
-        # ---------------------------------------------------------
 
         prompt = self._build_prompt(
             query=query,
             context=context,
         )
 
-        # ---------------------------------------------------------
-        # 4. Generate answer
-        # ---------------------------------------------------------
-
-        return self.chat_model.invoke(
+        answer = self.chat_model.invoke(
             prompt
         )
 
+        return answer.strip()
+
+
+# ============================================================
+# Serialization
+# ============================================================
 
 def serialize_result(
     result: Any,
 ) -> dict:
-
     payload = result.payload or {}
 
     return {

@@ -41,22 +41,15 @@ ARABIC_STOP_WORDS = {
 }
 
 
-def normalize_digits(
-    text: str,
-) -> str:
-
-    return text.translate(
-        ARABIC_TO_WESTERN
-    )
+def normalize_digits(text: str) -> str:
+    return text.translate(ARABIC_TO_WESTERN)
 
 
-def normalize_arabic_text(
-    text: str,
-) -> str:
+def normalize_arabic_text(text: str) -> str:
     """
     Conservative Arabic normalization.
 
-    This is intentionally NOT an Arabic stemmer.
+    This intentionally does not perform stemming.
     """
 
     if not text:
@@ -67,46 +60,25 @@ def normalize_arabic_text(
         text,
     )
 
-    # Arabic-Indic digits -> Western digits
-    text = normalize_digits(
-        text
-    )
+    text = normalize_digits(text)
 
-    # Normalize Arabic letter variants
-    text = text.replace(
-        "أ",
-        "ا",
-    )
+    # Normalize Arabic letter variants.
+    text = text.replace("أ", "ا")
+    text = text.replace("إ", "ا")
+    text = text.replace("آ", "ا")
+    text = text.replace("ى", "ي")
 
-    text = text.replace(
-        "إ",
-        "ا",
-    )
-
-    text = text.replace(
-        "آ",
-        "ا",
-    )
-
-    text = text.replace(
-        "ى",
-        "ي",
-    )
-
-    # Remove tashkeel
+    # Remove tashkeel.
     text = re.sub(
         r"[\u0610-\u061A\u064B-\u065F\u0670]",
         "",
         text,
     )
 
-    # Remove tatweel
-    text = text.replace(
-        "ـ",
-        "",
-    )
+    # Remove tatweel.
+    text = text.replace("ـ", "")
 
-    # Remove punctuation
+    # Remove punctuation.
     text = re.sub(
         r"[^\w\s]",
         " ",
@@ -114,7 +86,7 @@ def normalize_arabic_text(
         flags=re.UNICODE,
     )
 
-    # Normalize whitespace
+    # Normalize whitespace.
     text = re.sub(
         r"\s+",
         " ",
@@ -124,16 +96,12 @@ def normalize_arabic_text(
     return text.strip()
 
 
-def tokenize_arabic(
-    text: str,
-) -> List[str]:
+def tokenize_arabic(text: str) -> List[str]:
     """
     Tokenize Arabic text for BM25.
     """
 
-    normalized = normalize_arabic_text(
-        text
-    )
+    normalized = normalize_arabic_text(text)
 
     if not normalized:
         return []
@@ -148,6 +116,38 @@ def tokenize_arabic(
 
 
 # ============================================================
+# Result wrapper
+# ============================================================
+
+class RetrievalResult:
+    """
+    Compatibility wrapper for retrieved documents.
+
+    Exposes:
+
+        result.payload
+        result.score
+        result.id
+    """
+
+    def __init__(
+        self,
+        document: Any,
+        score: float,
+    ) -> None:
+        self.document = document
+        self.score = score
+
+    @property
+    def payload(self):
+        return self.document.payload or {}
+
+    @property
+    def id(self):
+        return self.document.id
+
+
+# ============================================================
 # BM25 lexical search
 # ============================================================
 
@@ -156,6 +156,13 @@ def lexical_search(
     documents: list,
     limit: int = 20,
 ) -> list:
+    """
+    Perform Arabic BM25 search over the complete document set.
+
+    We include both legal metadata and document content because
+    legal hierarchy is highly informative for retrieval.
+    """
+
     if not documents:
         return []
 
@@ -169,10 +176,22 @@ def lexical_search(
     for document in documents:
         payload = document.payload or {}
 
-        law_number = str(payload.get("law_number", ""))
-        title = str(payload.get("title", ""))
-        content = str(payload.get("content", ""))
+        law_number = str(
+            payload.get("law_number", "")
+        )
 
+        title = str(
+            payload.get("title", "")
+        )
+
+        content = str(
+            payload.get("content", "")
+        )
+
+        # The current dataset stores the legal hierarchy in
+        # "title". Keep these fields separate here so the
+        # searchable representation is explicit and easy to
+        # extend if the payload changes later.
         searchable_text = " ".join(
             [
                 law_number,
@@ -181,11 +200,17 @@ def lexical_search(
             ]
         )
 
-        corpus.append(tokenize_arabic(searchable_text))
+        corpus.append(
+            tokenize_arabic(
+                searchable_text
+            )
+        )
 
     bm25 = BM25Okapi(corpus)
 
-    scores = bm25.get_scores(tokenized_query)
+    scores = bm25.get_scores(
+        tokenized_query
+    )
 
     ranked_indexes = sorted(
         range(len(documents)),
@@ -196,7 +221,9 @@ def lexical_search(
     results = []
 
     for index in ranked_indexes[:limit]:
-        score = float(scores[index])
+        score = float(
+            scores[index]
+        )
 
         if score <= 0:
             continue
@@ -210,6 +237,7 @@ def lexical_search(
 
     return results
 
+
 # ============================================================
 # Reciprocal Rank Fusion
 # ============================================================
@@ -219,17 +247,13 @@ def reciprocal_rank_fusion(
     lexical_results: List[Dict[str, Any]],
     limit: int = 10,
     k: int = 60,
-) -> List[Any]:
+) -> List[RetrievalResult]:
     """
     Combine semantic and lexical rankings using RRF.
 
-    RRF:
-
-        score = 1 / (k + rank)
-
-    We deliberately DO NOT combine the raw cosine
-    similarity and BM25 scores because they have
-    different scales.
+    RRF intentionally combines ranks rather than raw scores
+    because cosine similarity and BM25 scores have different
+    scales.
     """
 
     fused = {}
@@ -239,15 +263,10 @@ def reciprocal_rank_fusion(
     # --------------------------------------------------------
 
     for result in semantic_results:
-
         document = result["document"]
-
-        document_id = str(
-            document.id
-        )
+        document_id = str(document.id)
 
         if document_id not in fused:
-
             fused[document_id] = {
                 "document": document,
                 "rrf_score": 0.0,
@@ -259,29 +278,13 @@ def reciprocal_rank_fusion(
 
         rank = result["rank"]
 
-        fused[
-            document_id
-        ][
-            "rrf_score"
-        ] += (
-            1.0
-            / (
-                k + rank
-            )
+        fused[document_id]["rrf_score"] += (
+            1.0 / (k + rank)
         )
 
-        fused[
-            document_id
-        ][
-            "semantic_rank"
-        ] = rank
-
-        fused[
-            document_id
-        ][
-            "semantic_score"
-        ] = result.get(
-            "score"
+        fused[document_id]["semantic_rank"] = rank
+        fused[document_id]["semantic_score"] = (
+            result.get("score")
         )
 
     # --------------------------------------------------------
@@ -289,15 +292,10 @@ def reciprocal_rank_fusion(
     # --------------------------------------------------------
 
     for result in lexical_results:
-
         document = result["document"]
-
-        document_id = str(
-            document.id
-        )
+        document_id = str(document.id)
 
         if document_id not in fused:
-
             fused[document_id] = {
                 "document": document,
                 "rrf_score": 0.0,
@@ -309,122 +307,32 @@ def reciprocal_rank_fusion(
 
         rank = result["rank"]
 
-        fused[
-            document_id
-        ][
-            "rrf_score"
-        ] += (
-            1.0
-            / (
-                k + rank
-            )
+        fused[document_id]["rrf_score"] += (
+            1.0 / (k + rank)
         )
 
-        fused[
-            document_id
-        ][
-            "lexical_rank"
-        ] = rank
-
-        fused[
-            document_id
-        ][
-            "lexical_score"
-        ] = result.get(
-            "score"
+        fused[document_id]["lexical_rank"] = rank
+        fused[document_id]["lexical_score"] = (
+            result.get("score")
         )
 
     # --------------------------------------------------------
-    # Sort by RRF score
+    # Sort by fused RRF score
     # --------------------------------------------------------
 
     ranked = sorted(
         fused.values(),
-        key=lambda item: item[
-            "rrf_score"
-        ],
+        key=lambda item: item["rrf_score"],
         reverse=True,
     )
 
-    # --------------------------------------------------------
-    # Return Qdrant-like documents
-    #
-    # Your Streamlit code expects:
-    #
-    # result.payload
-    # result.score
-    #
-    # Therefore we attach the RRF score directly
-    # to the Qdrant result object.
-    # --------------------------------------------------------
-
-    final_results = []
-
-    for item in ranked[:limit]:
-
-        document = item[
-            "document"
-        ]
-
-        # Preserve the original document object.
-        #
-        # Streamlit's serialize_result() expects
-        # document.payload and document.score.
-        #
-        # Qdrant ScoredPoint normally allows score
-        # to be read, but we don't want to mutate
-        # the object in an unsafe way.
-        #
-        # Instead, return a small wrapper.
-
-        final_results.append(
-            RetrievalResult(
-                document=document,
-                score=item[
-                    "rrf_score"
-                ],
-            )
+    return [
+        RetrievalResult(
+            document=item["document"],
+            score=item["rrf_score"],
         )
-
-    return final_results
-
-
-# ============================================================
-# Result wrapper
-# ============================================================
-
-class RetrievalResult:
-    """
-    Small compatibility wrapper.
-
-    It exposes the same attributes that the current
-    Streamlit code expects:
-
-        result.payload
-        result.score
-    """
-
-    def __init__(
-        self,
-        document: Any,
-        score: float,
-    ) -> None:
-
-        self.document = document
-        self.score = score
-
-    @property
-    def payload(self):
-
-        return (
-            self.document.payload
-            or {}
-        )
-
-    @property
-    def id(self):
-
-        return self.document.id
+        for item in ranked[:limit]
+    ]
 
 
 # ============================================================
@@ -435,22 +343,36 @@ def hybrid_search(
     query: str,
     semantic_results: List[Any],
     lexical_results: List[RetrievalResult],
-    limit: int = 5,
+    limit: int = 10,
 ) -> List[RetrievalResult]:
+    """
+    Combine semantic and BM25 retrieval using RRF.
+    """
+
     semantic_ranked = []
 
-    for rank, document in enumerate(semantic_results, start=1):
+    for rank, document in enumerate(
+        semantic_results,
+        start=1,
+    ):
         semantic_ranked.append(
             {
                 "document": document,
-                "score": getattr(document, "score", 0.0),
+                "score": getattr(
+                    document,
+                    "score",
+                    0.0,
+                ),
                 "rank": rank,
             }
         )
 
     lexical_ranked = []
 
-    for rank, result in enumerate(lexical_results, start=1):
+    for rank, result in enumerate(
+        lexical_results,
+        start=1,
+    ):
         lexical_ranked.append(
             {
                 "document": result.document,
