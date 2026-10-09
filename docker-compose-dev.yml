@@ -43,6 +43,10 @@ services:
     container_name: rag-app
     env_file:
       - .env
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    volumes:
+      - ./evaluation/datasets:/app/evaluation/datasets:ro
     ports:
       - "${STREAMLIT_PORT}:${STREAMLIT_PORT}"
     command:

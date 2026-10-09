@@ -1,5 +1,7 @@
 import re
 from dataclasses import dataclass
+import logging
+import os
 from typing import Any, List, Optional
 
 from ..clients.vector_db_client import VectorDBClientWrapper
@@ -7,7 +9,9 @@ from ..models.chat import ChatBotLlmModel
 from ..models.embedding import EmbeddingModel
 from ..models.guard import GuardModel, GuardResult
 from .retrieval import hybrid_search, lexical_search
+from ..tracking.langfuse_tracing import get_langfuse_client
 
+logger = logging.getLogger(__name__)
 
 ARABIC_DIGITS = "٠١٢٣٤٥٦٧٨٩"
 WESTERN_DIGITS = "0123456789"
@@ -389,45 +393,138 @@ class RAG:
     # ========================================================
     # Answer generation
     # ========================================================
+    def answer(self, query: str) -> str:
+        """Answer a question and trace the RAG execution in Langfuse."""
 
-    def answer(
-        self,
-        query: str,
-    ) -> str:
+        langfuse = get_langfuse_client()
 
-        retrieval = (
-            self.retrieve_legal_documents(
-                query
+        # Keep the RAG application usable when tracing is disabled.
+        if langfuse is None:
+            return self._answer_without_tracing(query)
+
+        with langfuse.start_as_current_observation(
+            as_type="span",
+            name="rag.ask",
+            input={"question": query},
+            metadata={
+                "component": "egyptian-civil-code-rag",
+                "retrieval_limit": str(self.retrieval_limit),
+            },
+        ) as root_span:
+
+            with langfuse.start_as_current_observation(
+                as_type="span",
+                name="rag.retrieval",
+                input={"question": query},
+            ) as retrieval_span:
+                retrieval = self.retrieve_legal_documents(query)
+
+                source_articles = [
+                    str((document.payload or {}).get("law_number", ""))
+                    for document in retrieval.results
+                    if (document.payload or {}).get("law_number")
+                ]
+
+                retrieval_span.update(
+                    output={
+                        "accepted": retrieval.accepted,
+                        "search_type": retrieval.search_type,
+                        "result_count": len(retrieval.results),
+                        "source_articles": source_articles,
+                        "refusal_reason": retrieval.refusal_reason,
+                    }
+                )
+
+            if not retrieval.accepted:
+                answer = (
+                    retrieval.refusal_reason
+                    or "Unable to process the request."
+                )
+
+                root_span.update(
+                    output={
+                        "answer": answer,
+                        "sources": source_articles,
+                        "status": "rejected",
+                    }
+                )
+                return answer
+
+            if not retrieval.results:
+                answer = (
+                    "لم يتم العثور على سياق قانوني "
+                    "مناسب للإجابة عن السؤال."
+                )
+
+                root_span.update(
+                    output={
+                        "answer": answer,
+                        "sources": [],
+                        "status": "no_context",
+                    }
+                )
+                return answer
+
+            context = self._build_context(retrieval.results)
+            prompt = self._build_prompt(
+                query=query,
+                context=context,
             )
-        )
 
+            with langfuse.start_as_current_observation(
+                as_type="generation",
+                name="rag.answer_generation",
+                model=getattr(
+                    self.chat_model,
+                    "model_name",
+                    os.getenv(
+                        "CHATBOT_MODEL",
+                        "unknown",
+                    ),
+                ),
+                input={
+                    "question": query,
+                    "context_document_count": len(retrieval.results),
+                },
+            ) as generation:
+                answer = self.chat_model.invoke(prompt).strip()
+
+                generation.update(
+                    output=answer,
+                )
+
+            root_span.update(
+                output={
+                    "answer": answer,
+                    "sources": source_articles,
+                    "status": "success",
+                },
+                metadata={
+                    "search_type": retrieval.search_type,
+                    "source_count": str(len(source_articles)),
+                },
+            )
+            return answer
+
+    def _answer_without_tracing(self, query: str) -> str:
+        """Original RAG answer flow, without observability dependencies."""
+        retrieval = self.retrieve_legal_documents(query)
         if not retrieval.accepted:
             return (
                 retrieval.refusal_reason
                 or "Unable to process the request."
             )
-
         if not retrieval.results:
             return (
                 "لم يتم العثور على سياق قانوني "
                 "مناسب للإجابة عن السؤال."
             )
-
-        context = self._build_context(
-            retrieval.results
-        )
-
+        context = self._build_context(retrieval.results)
         prompt = self._build_prompt(
             query=query,
             context=context,
         )
-
-        answer = self.chat_model.invoke(
-            prompt
-        )
-
-        return answer.strip()
-
+        return self.chat_model.invoke(prompt).strip()
 
 # ============================================================
 # Serialization

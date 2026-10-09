@@ -1,3 +1,4 @@
+
 from __future__ import annotations
 
 import argparse
@@ -10,6 +11,7 @@ import re
 import statistics
 import time
 from datetime import datetime, timezone
+from importlib.metadata import PackageNotFoundError, version
 from pathlib import Path
 from typing import Any
 
@@ -37,21 +39,132 @@ load_dotenv()
 
 logging.basicConfig(
     level=logging.INFO,
-    format="%(asctime)s %(levelname)s %(message)s",
+    format="%(asctime)s %(levelname)s %(name)s %(message)s",
 )
 logger = logging.getLogger(__name__)
 
-METRIC_NAMES = (
+RAGAS_METRIC_NAMES = (
     "faithfulness",
     "answer_relevancy",
     "answer_correctness",
     "context_precision",
     "context_recall",
+)
+
+RETRIEVAL_METRIC_NAMES = (
     "hit_rate",
     "precision_at_k",
     "recall_at_k",
     "mrr",
 )
+
+METRIC_NAMES = RAGAS_METRIC_NAMES + RETRIEVAL_METRIC_NAMES
+
+
+# ============================================================
+# Version and environment helpers
+# ============================================================
+
+def package_version(package_name: str) -> str:
+    try:
+        return version(package_name)
+    except PackageNotFoundError:
+        return "unknown"
+
+
+def env_value(name: str, default: str = "") -> str:
+    return os.getenv(name, default).strip()
+
+
+def env_enabled(name: str, default: str = "false") -> bool:
+    return env_value(name, default).lower() in {
+        "1", "true", "yes", "on"
+    }
+
+
+# ============================================================
+# Optional Langfuse integration
+# ============================================================
+
+def get_langfuse_client() -> Any | None:
+    """Return a Langfuse v4 client when tracing is enabled."""
+
+    if not env_enabled("LANGFUSE_ENABLED"):
+        logger.info("Langfuse tracing is disabled.")
+        return None
+
+    required = (
+        "LANGFUSE_PUBLIC_KEY",
+        "LANGFUSE_SECRET_KEY",
+        "LANGFUSE_BASE_URL",
+    )
+    missing = [key for key in required if not env_value(key)]
+
+    if missing:
+        logger.warning(
+            "Langfuse is enabled but configuration is incomplete; "
+            "missing: %s. Continuing without Langfuse.",
+            ", ".join(missing),
+        )
+        return None
+
+    try:
+        from langfuse import get_client
+
+        return get_client()
+    except Exception:
+        logger.exception(
+            "Could not initialize Langfuse; continuing without tracing."
+        )
+        return None
+
+
+def flush_langfuse(client: Any | None) -> None:
+    if client is None:
+        return
+
+    try:
+        client.flush()
+        logger.info("Flushed pending Langfuse events.")
+    except Exception:
+        logger.exception("Failed to flush Langfuse events.")
+
+
+def score_langfuse_trace(
+    client: Any,
+    result: dict[str, Any],
+) -> None:
+    """
+    Add numeric RAGAS and retrieval scores to the active Langfuse trace.
+    Failures in observability must not fail the evaluation itself.
+    """
+
+    for metric_name in METRIC_NAMES:
+        value = result.get(metric_name)
+
+        if not isinstance(value, (int, float)):
+            continue
+
+        if not math.isfinite(float(value)):
+            continue
+
+        try:
+            client.score_current_trace(
+                name=metric_name,
+                value=float(value),
+                data_type="NUMERIC",
+                comment=f"Automated evaluation: {metric_name}",
+                metadata={
+                    "evaluator": "RAGAS",
+                    "dataset_case_id": str(result["id"]),
+                },
+            )
+        except Exception:
+            logger.exception(
+                "Could not send score %s for case %s to Langfuse.",
+                metric_name,
+                result.get("id"),
+            )
 
 
 # ============================================================
@@ -59,7 +172,12 @@ METRIC_NAMES = (
 # ============================================================
 
 def load_dataset(path: Path) -> list[dict[str, Any]]:
-    """Load a JSON array, a {'data': [...]} object, or JSONL."""
+    """
+    Accept a JSON array, a {"data": [...]} JSON object, or JSONL.
+
+    Required fields:
+      id, question, reference, relevant_document_ids
+    """
 
     raw = path.read_text(encoding="utf-8").strip()
 
@@ -87,56 +205,50 @@ def load_dataset(path: Path) -> list[dict[str, Any]]:
             if line.strip()
         ]
 
+    if not records:
+        raise ValueError(f"No records found in dataset: {path}")
+
     required = {
         "id",
         "question",
         "reference",
         "relevant_document_ids",
     }
-
     seen_ids: set[str] = set()
 
     for index, record in enumerate(records, start=1):
-        missing = required - record.keys()
+        if not isinstance(record, dict):
+            raise ValueError(f"Record {index} must be a JSON object.")
 
+        missing = required - record.keys()
         if missing:
             raise ValueError(
-                f"Dataset record {index} is missing: "
-                f"{sorted(missing)}"
+                f"Record {index} is missing fields: {sorted(missing)}"
             )
 
         record_id = str(record["id"])
-
         if record_id in seen_ids:
-            raise ValueError(
-                f"Duplicate dataset ID: {record_id}"
-            )
-
+            raise ValueError(f"Duplicate dataset ID: {record_id}")
         seen_ids.add(record_id)
 
         if not str(record["question"]).strip():
-            raise ValueError(
-                f"Empty question in record {record_id}"
-            )
+            raise ValueError(f"Empty question in record {record_id}.")
 
-        if not isinstance(
-            record["relevant_document_ids"], list
-        ):
+        if not str(record["reference"]).strip():
+            raise ValueError(f"Empty reference in record {record_id}.")
+
+        if not isinstance(record["relevant_document_ids"], list):
             raise ValueError(
-                "relevant_document_ids must be a list "
-                f"in record {record_id}"
+                "relevant_document_ids must be a list in record "
+                f"{record_id}."
             )
 
     return records
 
 
 # ============================================================
-# Environment and RAG initialization
+# Build the existing RAG application
 # ============================================================
-
-def env_value(name: str, default: str = "") -> str:
-    return os.getenv(name, default).strip()
-
 
 def build_rag(top_k: int) -> RAG:
     qdrant_url = env_value("QDRANT_URL")
@@ -174,7 +286,7 @@ def endpoint_url(
     server = env_value(server_env, default_server).rstrip("/")
     port = env_value(port_env, "8000")
 
-    # Accept either a hostname or a URL already containing a port.
+    # Support either a hostname or a URL already containing a port.
     if re.search(r":\d+$", server):
         return f"{server}/v1"
 
@@ -182,42 +294,34 @@ def endpoint_url(
 
 
 def build_metrics() -> tuple[list[Any], list[AsyncOpenAI]]:
-    """Create RAGAS 0.4.3 metrics using the existing vLLM services."""
+    """Build RAGAS 0.4.x collection metrics using the vLLM endpoints."""
 
     judge_model = env_value(
         "CHATBOT_MODEL",
         "Qwen/Qwen2.5-0.5B-Instruct",
     )
-
     judge_url = endpoint_url(
         "CHATBOT_SERVER",
         "CHATBOT_SERVER_PORT",
         "http://llm",
     )
-
     judge_key = env_value("CHATBOT_API_KEY", "dumb")
 
     embedding_model = env_value(
         "EMBEDDING_MODEL",
         "Qwen/Qwen3-Embedding-0.6B",
     )
-
     embedding_url = endpoint_url(
         "EMBEDDING_MODEL_SERVER",
         "EMBEDDING_MODEL_SERVER_PORT",
         "http://embedding",
     )
-
-    embedding_key = env_value(
-        "EMBEDDING_MODEL_API_KEY",
-        "dumb",
-    )
+    embedding_key = env_value("EMBEDDING_MODEL_API_KEY", "dumb")
 
     judge_client = AsyncOpenAI(
         base_url=judge_url,
         api_key=judge_key,
     )
-
     embedding_client = AsyncOpenAI(
         base_url=embedding_url,
         api_key=embedding_key,
@@ -228,7 +332,6 @@ def build_metrics() -> tuple[list[Any], list[AsyncOpenAI]]:
         client=judge_client,
         max_tokens=2048,
     )
-
     judge_embeddings = embedding_factory(
         provider="openai",
         model=embedding_model,
@@ -253,7 +356,7 @@ def build_metrics() -> tuple[list[Any], list[AsyncOpenAI]]:
 
 
 # ============================================================
-# Document helpers
+# Retrieved-document helpers
 # ============================================================
 
 def get_payload(document: Any) -> dict[str, Any]:
@@ -262,47 +365,40 @@ def get_payload(document: Any) -> dict[str, Any]:
 
 
 def document_text(document: Any) -> str:
-    """Format the retrieved Qdrant payload as evaluation context."""
+    """Format a Qdrant payload as text for RAGAS."""
 
     payload = get_payload(document)
 
-    article = str(payload.get("law_number", ""))
-    title = str(payload.get("title", ""))
-    content = str(payload.get("content", ""))
-
-    parts = [
-        f"Article: {article}",
-        f"Legal hierarchy: {title}",
-        f"Text: {content}",
-    ]
-
-    return "\n".join(parts).strip()
+    return "\n".join(
+        [
+            f"Article: {payload.get('law_number', '')}",
+            f"Legal hierarchy: {payload.get('title', '')}",
+            f"Text: {payload.get('content', '')}",
+        ]
+    ).strip()
 
 
 def document_identifiers(document: Any) -> set[str]:
-    """Expose both Qdrant point ID and article-number identifiers."""
+    """Return the Qdrant point ID and article-number identifiers."""
 
     identifiers: set[str] = set()
-
     point_id = getattr(document, "id", None)
 
     if point_id is not None:
         identifiers.add(str(point_id).strip())
 
-    payload = get_payload(document)
-    law_number = str(payload.get("law_number", "")).strip()
+    law_number = str(
+        get_payload(document).get("law_number", "")
+    ).strip()
 
     if law_number:
         identifiers.add(law_number)
 
-        # Support datasets that identify documents by article number,
-        # e.g. "89" versus a payload containing "مادة ٨٩".
-        digits = re.sub(
-            r"[٠-٩]",
-            lambda match: str("٠١٢٣٤٥٦٧٨٩".index(match.group())),
-            law_number,
+        # Normalize Arabic-Indic digits to Western digits.
+        normalized = law_number.translate(
+            str.maketrans("٠١٢٣٤٥٦٧٨٩", "0123456789")
         )
-        article_match = re.search(r"\d+", digits)
+        article_match = re.search(r"\d+", normalized)
 
         if article_match:
             identifiers.add(article_match.group())
@@ -312,9 +408,6 @@ def document_identifiers(document: Any) -> set[str]:
 
 def normalize_reference_id(value: Any) -> str:
     value = str(value).strip()
-
-    if re.fullmatch(r"\d+", value):
-        return value
 
     if re.fullmatch(r"[٠-٩]+", value):
         return value.translate(
@@ -333,10 +426,10 @@ def calculate_retrieval_metrics(
     relevant_ids: list[Any],
 ) -> dict[str, float | None]:
     """
-    Calculate ID-based metrics.
+    ID-based metrics.
 
-    These metrics are meaningful only if relevant_document_ids
-    correspond to actual Qdrant point IDs or article identifiers.
+    The dataset's relevant_document_ids must match Qdrant point IDs
+    or article identifiers. If IDs are not annotated, scores are None.
     """
 
     expected = {
@@ -345,8 +438,6 @@ def calculate_retrieval_metrics(
     }
 
     if not expected:
-        # No gold IDs means retrieval precision/recall cannot
-        # be evaluated against an annotated relevant set.
         return {
             "hit_rate": None,
             "precision_at_k": None,
@@ -354,7 +445,7 @@ def calculate_retrieval_metrics(
             "mrr": None,
         }
 
-    ranked_ids: list[set[str]] = [
+    ranked_ids = [
         {
             normalize_reference_id(identifier)
             for identifier in document_identifiers(document)
@@ -369,13 +460,11 @@ def calculate_retrieval_metrics(
 
     hits = sum(relevant_flags)
     retrieved_count = len(ranked_ids)
+
     first_relevant_rank = next(
         (
             rank
-            for rank, is_relevant in enumerate(
-                relevant_flags,
-                start=1,
-            )
+            for rank, is_relevant in enumerate(relevant_flags, start=1)
             if is_relevant
         ),
         None,
@@ -396,7 +485,7 @@ def calculate_retrieval_metrics(
 
 
 # ============================================================
-# Generate an answer from the SAME retrieval result
+# Generate an answer from the same retrieval result
 # ============================================================
 
 def generate_from_retrieval(
@@ -405,8 +494,9 @@ def generate_from_retrieval(
     retrieval: Any,
 ) -> str:
     """
-    Avoid calling rag.answer(question) here because it would
-    retrieve documents a second time.
+    Generate from an existing retrieval result.
+
+    This avoids calling rag.answer(question), which would retrieve again.
     """
 
     if not retrieval.accepted:
@@ -419,34 +509,26 @@ def generate_from_retrieval(
         return "لم يتم العثور على سياق قانوني مناسب للإجابة عن السؤال."
 
     context = rag._build_context(retrieval.results)
-
-    prompt = rag._build_prompt(
-        query=question,
-        context=context,
-    )
+    prompt = rag._build_prompt(query=question, context=context)
 
     return rag.chat_model.invoke(prompt).strip()
 
 
 # ============================================================
-# RAGAS 0.4.3 scoring
+# One evaluation case
 # ============================================================
 
-def score_value(result: Any) -> float | None:
-    value = getattr(result, "value", None)
+def score_value(metric_result: Any) -> float | None:
+    value = getattr(metric_result, "value", None)
 
     if value is None:
         return None
 
     value = float(value)
-
-    if not math.isfinite(value):
-        return None
-
-    return value
+    return value if math.isfinite(value) else None
 
 
-async def evaluate_case(
+async def _evaluate_case(
     record: dict[str, Any],
     rag: RAG,
     metrics: list[Any],
@@ -454,10 +536,10 @@ async def evaluate_case(
 ) -> dict[str, Any]:
     question = str(record["question"])
     reference = str(record["reference"])
-
     started = time.perf_counter()
 
-    # Retrieve exactly once; generation and evaluation use these results.
+    # Retrieve exactly once; use the same documents for generation
+    # and RAGAS context evaluation.
     retrieval = rag.retrieve_legal_documents(
         question,
         limit=top_k,
@@ -475,8 +557,6 @@ async def evaluate_case(
         retrieval=retrieval,
     )
 
-    elapsed_seconds = time.perf_counter() - started
-
     result: dict[str, Any] = {
         "id": str(record["id"]),
         "question": question,
@@ -490,9 +570,7 @@ async def evaluate_case(
         "retrieved_documents": [
             {
                 "id": str(getattr(document, "id", "")),
-                "law_number": get_payload(document).get(
-                    "law_number"
-                ),
+                "law_number": get_payload(document).get("law_number"),
                 "title": get_payload(document).get("title"),
                 "content": get_payload(document).get("content"),
                 "score": getattr(document, "score", None),
@@ -500,7 +578,10 @@ async def evaluate_case(
             for document in retrieved_documents
         ],
         "retrieved_contexts": contexts,
-        "latency_seconds": round(elapsed_seconds, 4),
+        "latency_seconds": round(
+            time.perf_counter() - started,
+            4,
+        ),
     }
 
     result.update(
@@ -510,21 +591,13 @@ async def evaluate_case(
         )
     )
 
-    # RAGAS metrics that require an answer/context/reference cannot
-    # be scored meaningfully if the system returned no context.
     if not contexts or not answer.strip():
-        for name in (
-            "faithfulness",
-            "answer_relevancy",
-            "answer_correctness",
-            "context_precision",
-            "context_recall",
-        ):
+        for name in RAGAS_METRIC_NAMES:
             result[name] = None
 
-        result["metric_errors"] = (
-            "No retrieved contexts or no generated answer."
-        )
+        result["metric_errors"] = {
+            "evaluation": "No retrieved contexts or no generated answer."
+        }
         return result
 
     metric_inputs = {
@@ -554,21 +627,18 @@ async def evaluate_case(
         },
     }
 
-    result["metric_errors"] = {}
+    metric_errors: dict[str, str] = {}
 
     for metric in metrics:
         name = metric.name
+
         try:
-            metric_result = await metric.ascore(
-                **metric_inputs[name]
-            )
+            metric_result = await metric.ascore(**metric_inputs[name])
             result[name] = score_value(metric_result)
 
             reason = getattr(metric_result, "reason", None)
             if reason:
-                result.setdefault("metric_reasons", {})[name] = str(
-                    reason
-                )
+                result.setdefault("metric_reasons", {})[name] = str(reason)
 
         except Exception as exc:
             logger.exception(
@@ -577,16 +647,82 @@ async def evaluate_case(
                 record["id"],
             )
             result[name] = None
-            result["metric_errors"][name] = str(exc)
+            metric_errors[name] = str(exc)
 
-    if not result["metric_errors"]:
-        result.pop("metric_errors")
+    if metric_errors:
+        result["metric_errors"] = metric_errors
 
     return result
 
 
+async def evaluate_case(
+    record: dict[str, Any],
+    rag: RAG,
+    metrics: list[Any],
+    top_k: int,
+    langfuse: Any | None,
+) -> dict[str, Any]:
+    """Wrap one evaluation case in a Langfuse trace when enabled."""
+
+    if langfuse is None:
+        return await _evaluate_case(record, rag, metrics, top_k)
+
+    case_id = str(record["id"])
+    question = str(record["question"])
+
+    try:
+        with langfuse.start_as_current_observation(
+            as_type="evaluator",
+            name="ragas.evaluation_case",
+            input={
+                "case_id": case_id,
+                "question": question,
+                "reference": str(record["reference"]),
+            },
+            metadata={
+                "component": "ragas",
+                "top_k": top_k,
+                "dataset_category": record.get("category"),
+                "dataset_difficulty": record.get("difficulty"),
+                "ragas_version": package_version("ragas"),
+            },
+        ) as observation:
+            result = await _evaluate_case(
+                record=record,
+                rag=rag,
+                metrics=metrics,
+                top_k=top_k,
+            )
+
+            observation.update(
+                output={
+                    "case_id": case_id,
+                    "answer": result.get("answer"),
+                    "accepted": result.get("accepted"),
+                    "latency_seconds": result.get("latency_seconds"),
+                    "scores": {
+                        name: result.get(name)
+                        for name in METRIC_NAMES
+                    },
+                    "metric_errors": result.get("metric_errors", {}),
+                }
+            )
+
+            score_langfuse_trace(langfuse, result)
+            return result
+
+    except Exception:
+        logger.exception(
+            "Langfuse-wrapped evaluation failed for case %s.",
+            case_id,
+        )
+        # Do not silently rerun a failed evaluation: generation or
+        # retrieval might be expensive and could produce a different answer.
+        raise
+
+
 # ============================================================
-# Aggregate results and MLflow
+# Aggregate results
 # ============================================================
 
 def calculate_summary(
@@ -611,8 +747,25 @@ def calculate_summary(
             "total_cases": len(results),
         }
 
+    latencies = [
+        float(row["latency_seconds"])
+        for row in results
+        if isinstance(row.get("latency_seconds"), (int, float))
+        and math.isfinite(float(row["latency_seconds"]))
+    ]
+
+    summary["latency_seconds"] = {
+        "mean": statistics.fmean(latencies) if latencies else None,
+        "max": max(latencies) if latencies else None,
+        "total_cases": len(latencies),
+    }
+
     return summary
 
+
+# ============================================================
+# MLflow logging
+# ============================================================
 
 def log_to_mlflow(
     results: list[dict[str, Any]],
@@ -638,13 +791,33 @@ def log_to_mlflow(
     with mlflow.start_run(
         run_name=f"ragas-{datetime.now(timezone.utc):%Y%m%d-%H%M%S}"
     ):
+        mlflow.set_tags(
+            {
+                "evaluation_framework": "RAGAS",
+                "langfuse_enabled": str(
+                    env_enabled("LANGFUSE_ENABLED")
+                ).lower(),
+                "qdrant_collection": env_value(
+                    "QDRANT_COLLECTION",
+                    "test_qwen_embeddings",
+                ),
+            }
+        )
+
         mlflow.log_params(
             {
-                "ragas_version": "0.4.3",
+                "ragas_version": package_version("ragas"),
+                "langfuse_sdk_version": package_version("langfuse"),
                 "dataset": str(dataset_path),
                 "top_k": top_k,
-                "judge_model": env_value("CHATBOT_MODEL"),
-                "embedding_model": env_value("EMBEDDING_MODEL"),
+                "judge_model": env_value(
+                    "CHATBOT_MODEL",
+                    "Qwen/Qwen2.5-0.5B-Instruct",
+                ),
+                "embedding_model": env_value(
+                    "EMBEDDING_MODEL",
+                    "Qwen/Qwen3-Embedding-0.6B",
+                ),
                 "qdrant_collection": env_value(
                     "QDRANT_COLLECTION",
                     "test_qwen_embeddings",
@@ -664,6 +837,21 @@ def log_to_mlflow(
                 float(data["scored_cases"]),
             )
 
+        mean_latency = summary["latency_seconds"]["mean"]
+        max_latency = summary["latency_seconds"]["max"]
+
+        if mean_latency is not None:
+            mlflow.log_metric(
+                "mean_latency_seconds",
+                float(mean_latency),
+            )
+
+        if max_latency is not None:
+            mlflow.log_metric(
+                "max_latency_seconds",
+                float(max_latency),
+            )
+
         mlflow.log_artifact(
             str(output_dir / "results.json"),
             artifact_path="evaluation",
@@ -673,6 +861,11 @@ def log_to_mlflow(
             artifact_path="evaluation",
         )
 
+        logger.info(
+            "Logged evaluation metrics and artifacts to MLflow run %s.",
+            mlflow.active_run().info.run_id,
+        )
+
 
 # ============================================================
 # Main
@@ -680,7 +873,7 @@ def log_to_mlflow(
 
 async def main() -> None:
     parser = argparse.ArgumentParser(
-        description="Evaluate the RAG application with RAGAS 0.4.3."
+        description="Evaluate the RAG application with RAGAS."
     )
     parser.add_argument(
         "--dataset",
@@ -700,25 +893,31 @@ async def main() -> None:
     if args.top_k < 1:
         parser.error("--top-k must be at least 1")
 
-    records = load_dataset(args.dataset)
+    if args.limit < 0:
+        parser.error("--limit cannot be negative")
 
+    records = load_dataset(args.dataset)
     if args.limit > 0:
-        records = records[: args.limit]
+        records = records[:args.limit]
 
     if not records:
         raise ValueError("No evaluation cases to run.")
 
     args.output_dir.mkdir(parents=True, exist_ok=True)
 
-    logger.info("Loading RAG application...")
-    rag = build_rag(top_k=args.top_k)
-
-    logger.info("Initializing RAGAS 0.4.3 metrics...")
-    metrics, clients = build_metrics()
-
-    results: list[dict[str, Any]] = []
+    langfuse = get_langfuse_client()
+    clients: list[AsyncOpenAI] = []
 
     try:
+        logger.info("Loading RAG application...")
+        rag = build_rag(top_k=args.top_k)
+
+        logger.info("Initializing RAGAS metrics...")
+        metrics, clients = build_metrics()
+
+        results: list[dict[str, Any]] = []
+        results_path = args.output_dir / "results.json"
+
         for index, record in enumerate(records, start=1):
             logger.info(
                 "Evaluating case %s/%s: %s",
@@ -732,12 +931,12 @@ async def main() -> None:
                 rag=rag,
                 metrics=metrics,
                 top_k=args.top_k,
+                langfuse=langfuse,
             )
-
             results.append(case_result)
 
-            # Save incrementally so partial results survive a later failure.
-            (args.output_dir / "results.json").write_text(
+            # Save incrementally so partial results survive interruptions.
+            results_path.write_text(
                 json.dumps(
                     results,
                     ensure_ascii=False,
@@ -747,37 +946,46 @@ async def main() -> None:
                 encoding="utf-8",
             )
 
-    finally:
-        for client in clients:
-            await client.close()
+        summary = calculate_summary(results)
+        summary["dataset"] = str(args.dataset)
+        summary["top_k"] = args.top_k
+        summary["created_at"] = datetime.now(timezone.utc).isoformat()
+        summary["versions"] = {
+            "ragas": package_version("ragas"),
+            "langfuse": package_version("langfuse"),
+            "mlflow": package_version("mlflow"),
+        }
 
-    summary = calculate_summary(results)
-    summary["dataset"] = str(args.dataset)
-    summary["top_k"] = args.top_k
-    summary["created_at"] = datetime.now(
-        timezone.utc
-    ).isoformat()
-
-    (args.output_dir / "summary.json").write_text(
-        json.dumps(
-            summary,
-            ensure_ascii=False,
-            indent=2,
-            default=str,
-        ),
-        encoding="utf-8",
-    )
-
-    if not args.no_mlflow:
-        log_to_mlflow(
-            results=results,
-            summary=summary,
-            output_dir=args.output_dir,
-            dataset_path=args.dataset,
-            top_k=args.top_k,
+        summary_path = args.output_dir / "summary.json"
+        summary_path.write_text(
+            json.dumps(
+                summary,
+                ensure_ascii=False,
+                indent=2,
+                default=str,
+            ),
+            encoding="utf-8",
         )
 
-    print(json.dumps(summary, ensure_ascii=False, indent=2))
+        if not args.no_mlflow:
+            log_to_mlflow(
+                results=results,
+                summary=summary,
+                output_dir=args.output_dir,
+                dataset_path=args.dataset,
+                top_k=args.top_k,
+            )
+
+        print(json.dumps(summary, ensure_ascii=False, indent=2))
+
+    finally:
+        for client in clients:
+            try:
+                await client.close()
+            except Exception:
+                logger.exception("Failed to close an evaluation API client.")
+
+        flush_langfuse(langfuse)
 
 
 if __name__ == "__main__":
