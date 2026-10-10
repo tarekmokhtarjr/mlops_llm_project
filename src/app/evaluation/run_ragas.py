@@ -327,10 +327,17 @@ def build_metrics() -> tuple[list[Any], list[AsyncOpenAI]]:
         api_key=embedding_key,
     )
 
+    judge_max_tokens = int(
+        env_value("RAGAS_JUDGE_MAX_TOKENS", "512")
+    )
+
+    if judge_max_tokens < 1:
+        raise ValueError("RAGAS_JUDGE_MAX_TOKENS must be >= 1")
+
     judge_llm = llm_factory(
         judge_model,
         client=judge_client,
-        max_tokens=10000,
+        max_tokens=judge_max_tokens,
     )
     judge_embeddings = embedding_factory(
         provider="openai",
