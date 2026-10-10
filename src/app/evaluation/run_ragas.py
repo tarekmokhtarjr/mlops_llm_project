@@ -330,7 +330,7 @@ def build_metrics() -> tuple[list[Any], list[AsyncOpenAI]]:
     judge_llm = llm_factory(
         judge_model,
         client=judge_client,
-        max_tokens=2048,
+        max_tokens=10000,
     )
     judge_embeddings = embedding_factory(
         provider="openai",
