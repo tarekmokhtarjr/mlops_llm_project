@@ -13,7 +13,7 @@ MODEL = "Qwen/Qwen3-Embedding-0.6B"
 QDRANT_HOST = "localhost"
 QDRANT_PORT = 6333
 
-COLLECTION_NAME = "test_qwen_embeddings"
+COLLECTION_NAME = "Egyptian_Civil_Law_131"
 
 
 def get_embedding(text: str) -> list[float]:
