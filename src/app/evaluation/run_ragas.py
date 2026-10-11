@@ -260,7 +260,7 @@ def build_rag(top_k: int) -> RAG:
 
     collection = env_value(
         "QDRANT_COLLECTION",
-        "test_qwen_embeddings",
+        "Egyptian_Civil_Law_131",
     )
 
     vector_db = VectorDBClientWrapper(
@@ -806,7 +806,7 @@ def log_to_mlflow(
                 ).lower(),
                 "qdrant_collection": env_value(
                     "QDRANT_COLLECTION",
-                    "test_qwen_embeddings",
+                    "Egyptian_Civil_Law_131",
                 ),
             }
         )
@@ -827,7 +827,7 @@ def log_to_mlflow(
                 ),
                 "qdrant_collection": env_value(
                     "QDRANT_COLLECTION",
-                    "test_qwen_embeddings",
+                    "Egyptian_Civil_Law_131",
                 ),
                 "case_count": len(results),
             }
