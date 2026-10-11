@@ -1,5 +1,4 @@
 # Data
-data/
 arabic-legal-documents-llm-9a9b19f505c4.json
 client_secrets.json
 .dvc/config
@@ -23,4 +22,3 @@ uv.lock
 htmlcov/
 report_output/
 test_results.txt
-/data
