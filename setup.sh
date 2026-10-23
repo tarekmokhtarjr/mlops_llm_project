@@ -1,4 +1,3 @@
-
 #!/usr/bin/env bash
 
 set -Eeuo pipefail
@@ -10,13 +9,18 @@ set -Eeuo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$ROOT_DIR"
 
-COMPOSE_FILE="docker-compose-dev.yml"
+INFERENCE_BACKEND="${INFERENCE_BACKEND:-vllm}"
+COMPOSE_FILE="${COMPOSE_FILE:-docker-compose-dev.yml}"
 
 HTML_FILE="data/egyptian_civil_law_131_1948.html"
 JSON_FILE="data/egyptian_civil_law_131_1948.json"
 
 QDRANT_URL="http://localhost:6333"
-EMBEDDING_URL="http://localhost:8001/v1/models"
+EMBEDDING_HEALTH_URL="${EMBEDDING_HEALTH_URL:-http://localhost:8001/v1/models}"
+INGESTION_EMBEDDING_SERVER="${INGESTION_EMBEDDING_SERVER:-http://localhost}"
+INGESTION_EMBEDDING_PORT="${INGESTION_EMBEDDING_PORT:-8001}"
+INGESTION_EMBEDDING_MODEL="${INGESTION_EMBEDDING_MODEL:-Qwen/Qwen3-Embedding-0.6B}"
+INGESTION_CHECK_CTX_LENGTH="${INGESTION_CHECK_CTX_LENGTH:-true}"
 
 MAX_WAIT_SECONDS="${MAX_WAIT_SECONDS:-900}"
 
@@ -31,6 +35,46 @@ log() {
 fail() {
     printf '\nERROR: %s\n' "$*" >&2
     exit 1
+}
+
+set_env() {
+    local key="$1"
+    local value="$2"
+    local temp_file
+    temp_file="$(mktemp)"
+
+    awk -v key="$key" -v value="$value" '
+        BEGIN { found = 0 }
+        index($0, key "=") == 1 {
+            print key "=" value
+            found = 1
+            next
+        }
+        { print }
+        END { if (!found) print key "=" value }
+    ' .env > "$temp_file"
+
+    mv "$temp_file" .env
+}
+
+wait_for_url() {
+    local url="$1"
+    local description="$2"
+    local deadline=$((SECONDS + MAX_WAIT_SECONDS))
+
+    log "Waiting for $description..."
+
+    until curl -fsS "$url" >/dev/null 2>&1; do
+        if (( SECONDS >= deadline )); then
+            docker compose -f "$COMPOSE_FILE" ps
+            docker compose -f "$COMPOSE_FILE" logs --tail=80 qdrant
+            fail "$description did not become ready within ${MAX_WAIT_SECONDS}s."
+        fi
+
+        sleep 5
+    done
+
+    log "$description is responding."
 }
 
 # ============================================================
@@ -52,9 +96,6 @@ command -v uv >/dev/null 2>&1 ||
 command -v curl >/dev/null 2>&1 ||
     fail "curl is required."
 
-command -v git >/dev/null 2>&1 ||
-    fail "Git is required."
-
 [[ -f "$COMPOSE_FILE" ]] ||
     fail "Missing $COMPOSE_FILE. Run this script from the project checkout."
 
@@ -65,30 +106,39 @@ command -v git >/dev/null 2>&1 ||
 if [[ -f ".env" ]]; then
     log ".env already exists; preserving the existing configuration."
 else
-    log "Creating .env from the project's example.env."
-
-    if git show origin/dev:example.env > .env 2>/dev/null; then
-        :
-    elif curl -fsSL \
-        "https://raw.githubusercontent.com/tarekmokhtarjr/mlops_llm_project/dev/example.env" \
-        -o .env; then
-        :
-    else
-        rm -f .env
-        fail "Could not retrieve example.env."
-    fi
-
+    [[ -f "example.env" ]] || fail "Missing example.env."
+    log "Creating .env from example.env."
+    cp example.env .env
     chmod 600 .env
-    log ".env created."
+fi
+
+if [[ "$INFERENCE_BACKEND" == "vllm" ]]; then
+    log "Writing vLLM development settings to .env."
+    set_env CHATBOT_MODEL "${VLLM_CHAT_MODEL:-Qwen/Qwen2.5-0.5B-Instruct}"
+    set_env CHATBOT_SERVER "http://llm"
+    set_env CHATBOT_SERVER_PORT "8000"
+    set_env CHATBOT_API_KEY "dumb"
+    set_env EMBEDDING_MODEL "${VLLM_EMBEDDING_MODEL:-Qwen/Qwen3-Embedding-0.6B}"
+    set_env EMBEDDING_MODEL_SERVER "http://embedding"
+    set_env EMBEDDING_MODEL_SERVER_PORT "8000"
+    set_env EMBEDDING_MODEL_API_KEY "dumb"
+    set_env EMBEDDING_CHECK_CTX_LENGTH "true"
+    set_env GUARD_MODEL "${VLLM_GUARD_MODEL:-Qwen/Qwen3Guard-Gen-0.6B}"
+    set_env GUARD_MODEL_SERVER "http://llm_guard"
+    set_env GUARD_MODEL_SERVER_PORT "8000"
+    set_env GUARD_MODEL_API_KEY "dumb"
+    set_env QDRANT_COLLECTION "Egyptian_Civil_Law_131"
+    chmod 600 .env
 fi
 
 # ============================================================
-# 3. Validate that the local dataset exists
+# 3. Validate the local dataset
 # ============================================================
 
 [[ -s "$HTML_FILE" ]] ||
     fail "Missing or empty $HTML_FILE. Place the dataset in the data/ directory."
 
+log "Using inference backend: $INFERENCE_BACKEND"
 log "Using the existing local dataset: $HTML_FILE"
 
 # ============================================================
@@ -96,7 +146,6 @@ log "Using the existing local dataset: $HTML_FILE"
 # ============================================================
 
 log "Building the rag-app Docker image."
-
 docker compose -f "$COMPOSE_FILE" build rag-app
 
 # ============================================================
@@ -104,50 +153,31 @@ docker compose -f "$COMPOSE_FILE" build rag-app
 # ============================================================
 
 log "Synchronizing Python dependencies."
-
 uv sync --no-dev
 
 # ============================================================
-# 6. Start Qdrant and the embedding model
+# 6. Start dependencies
 # ============================================================
 
-log "Starting Qdrant and the embedding service."
-
-docker compose -f "$COMPOSE_FILE" up -d qdrant embedding
-
-wait_for_url() {
-    local url="$1"
-    local description="$2"
-    local deadline=$((SECONDS + MAX_WAIT_SECONDS))
-
-    log "Waiting for $description..."
-
-    until curl -fsS "$url" >/dev/null 2>&1; do
-        if (( SECONDS >= deadline )); then
-            docker compose -f "$COMPOSE_FILE" ps
-            docker compose -f "$COMPOSE_FILE" logs --tail=80 qdrant embedding
-            fail "$description did not become ready within ${MAX_WAIT_SECONDS}s."
-        fi
-
-        sleep 5
-    done
-
-    log "$description is responding."
-}
+if [[ "$INFERENCE_BACKEND" == "vllm" ]]; then
+    log "Starting Qdrant and the vLLM embedding service."
+    docker compose -f "$COMPOSE_FILE" up -d qdrant embedding
+else
+    log "Starting Qdrant. Ollama remains on the host machine."
+    docker compose -f "$COMPOSE_FILE" up -d qdrant
+fi
 
 wait_for_url "$QDRANT_URL/healthz" "Qdrant"
-wait_for_url "$EMBEDDING_URL" "Embedding model API"
+wait_for_url "$EMBEDDING_HEALTH_URL" "$INFERENCE_BACKEND embedding API"
 
 # ============================================================
 # 7. Extract Egyptian laws from HTML into JSON
 # ============================================================
 
 log "Extracting Egyptian laws from HTML."
-
 uv run --no-sync python src/app/extract_egyptian_laws.py
 
-[[ -s "$JSON_FILE" ]] ||
-    fail "Extraction did not produce $JSON_FILE."
+[[ -s "$JSON_FILE" ]] || fail "Extraction did not produce $JSON_FILE."
 
 uv run --no-sync python -c '
 import json
@@ -167,7 +197,10 @@ print(f"Validated {len(records)} extracted law records.")
 # ============================================================
 
 log "Embedding laws and storing them in Qdrant."
-
+EMBEDDING_MODEL_SERVER="$INGESTION_EMBEDDING_SERVER" \
+EMBEDDING_MODEL_SERVER_PORT="$INGESTION_EMBEDDING_PORT" \
+EMBEDDING_MODEL="$INGESTION_EMBEDDING_MODEL" \
+EMBEDDING_CHECK_CTX_LENGTH="$INGESTION_CHECK_CTX_LENGTH" \
 uv run --no-sync python src/app/embed_and_store_data.py
 
 # ============================================================
@@ -176,8 +209,7 @@ uv run --no-sync python src/app/embed_and_store_data.py
 
 log "Setup completed successfully."
 log "Qdrant dashboard: $QDRANT_URL/dashboard"
-log "Embedding API: http://localhost:8001"
+log "Embedding API: $EMBEDDING_HEALTH_URL"
 log "Application image has been built."
-log "Only Qdrant and the embedding service were started."
 log "To start the complete stack, run:"
 log "docker compose -f $COMPOSE_FILE up -d"

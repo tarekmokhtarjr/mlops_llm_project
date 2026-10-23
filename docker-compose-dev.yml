@@ -1,4 +1,3 @@
-
 services:
   # --------------------------------------------------
   # Application infrastructure
@@ -12,31 +11,7 @@ services:
       - "6333:6333"
       - "6334:6334"
     volumes:
-      - qdrant_storage:/qdrant/storage
-    networks:
-      - rag-net
-
-  mlflow:
-    image: ghcr.io/mlflow/mlflow:v3.17.0
-    container_name: mlflow
-    restart: unless-stopped
-    ports:
-      - "${MLFLOW_PORT}:${MLFLOW_PORT}"
-    volumes:
-      - mlflow_data:/mlruns
-    command:
-      - mlflow
-      - server
-      - --host
-      - "0.0.0.0"
-      - --port
-      - "${MLFLOW_PORT}"
-      - --backend-store-uri
-      - "${MLFLOW_BACKEND_STORE_URI}"
-      - --default-artifact-root
-      - "${MLFLOW_ARTIFACT_LOCATION}"
-      - --allowed-hosts
-      - "${MLFLOW_ALLOWED_HOSTS}"
+      - ./qdrant_storage:/qdrant/storage
     networks:
       - rag-net
 
@@ -76,7 +51,6 @@ services:
       VLLM_CPU_KVCACHE_SPACE: "2"
       VLLM_ENABLE_V1_MULTIPROCESSING: "0"
       VLLM_LOGGING_LEVEL: "INFO"
-    cpuset: "0-7"
     command:
       - "Qwen/Qwen3Guard-Gen-0.6B"
       - "--served-model-name"
@@ -106,7 +80,6 @@ services:
       VLLM_CPU_KVCACHE_SPACE: "1"
       VLLM_ENABLE_V1_MULTIPROCESSING: "0"
       VLLM_LOGGING_LEVEL: "INFO"
-    cpuset: "0-7"
     command:
       - "Qwen/Qwen3-Embedding-0.6B"
       - "--served-model-name"
@@ -137,7 +110,6 @@ services:
     environment:
       VLLM_CPU_KVCACHE_SPACE: "1"
       VLLM_LOGGING_LEVEL: "INFO"
-    cpuset: "8-23"
     command:
       - "Qwen/Qwen2.5-0.5B-Instruct"
       - "--served-model-name"
@@ -165,9 +137,6 @@ services:
 # ----------------------------------------------------
 
 volumes:
-  qdrant_storage:
-    name: rag_qdrant_storage
-
   hf_cache:
     name: rag_hf_cache
 
