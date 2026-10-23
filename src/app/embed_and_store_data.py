@@ -1,5 +1,8 @@
 import json
+import os
+
 import requests
+from dotenv import load_dotenv
 from qdrant_client import QdrantClient
 from qdrant_client.models import (
     Distance,
@@ -7,8 +10,12 @@ from qdrant_client.models import (
     PointStruct,
 )
 
-EMBEDDING_URL = "http://localhost:8001/v1/embeddings"
-MODEL = "Qwen/Qwen3-Embedding-0.6B"
+load_dotenv()
+
+EMBEDDING_SERVER = os.getenv("EMBEDDING_MODEL_SERVER", "http://localhost")
+EMBEDDING_PORT = os.getenv("EMBEDDING_MODEL_SERVER_PORT", "8001")
+EMBEDDING_URL = f"{EMBEDDING_SERVER.rstrip('/')}:{EMBEDDING_PORT}/v1/embeddings"
+MODEL = os.getenv("EMBEDDING_MODEL", "Qwen/Qwen3-Embedding-0.6B")
 
 QDRANT_HOST = "localhost"
 QDRANT_PORT = 6333

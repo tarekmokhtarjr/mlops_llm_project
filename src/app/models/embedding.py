@@ -31,6 +31,11 @@ class EmbeddingModel:
             "dumb",
         )
 
+        self.check_embedding_ctx_length = os.getenv(
+            "EMBEDDING_CHECK_CTX_LENGTH",
+            "true",
+        ).lower() in {"1", "true", "yes", "on"}
+
         self.base_url=(
             os.getenv("EMBEDDING_MODEL_SERVER")
             + ":"
@@ -42,6 +47,7 @@ class EmbeddingModel:
             base_url=self.base_url,
             api_key=self.api_key,
             model=self.model_name,
+            check_embedding_ctx_length=self.check_embedding_ctx_length,
         )
 
     def embed(self, query: str) -> list:

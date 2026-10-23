@@ -12,5 +12,6 @@ COPY src ./src
 # Install project dependencies.
 RUN uv sync --no-dev
 
+VOLUME /qdrant
 # Make the src-layout imports work.
 ENV PYTHONPATH=/app/src

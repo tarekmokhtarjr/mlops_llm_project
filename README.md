@@ -1,6 +1,6 @@
 # Egyptian Civil Code RAG
 
-A containerized Retrieval-Augmented Generation (RAG) application for asking questions about the Egyptian Civil Code, Law No. 131 of 1948. The application retrieves legal provisions from a Qdrant vector database and uses Qwen models served through vLLM to generate answers grounded in the retrieved legal text.
+A containerized Retrieval-Augmented Generation (RAG) application for asking questions about the Egyptian Civil Code, Law No. 131 of 1948. The application retrieves legal provisions from a Qdrant vector database and uses Qwen models served through vLLM or host Ollama to generate answers grounded in the retrieved legal text.
 
 The project also includes safety guardrails, MLflow experiment tracking, RAGAS-based evaluation tooling, and Langfuse integration settings for observability.
 
@@ -11,6 +11,7 @@ The project also includes safety guardrails, MLflow experiment tracking, RAGAS-b
 - [Technology Stack](#technology-stack)
 - [Prerequisites](#prerequisites)
 - [Installation](#installation)
+- [Running with Ollama](#running-with-ollama)
 - [Starting and Stopping the Services](#starting-and-stopping-the-services)
 - [Accessing the Services](#accessing-the-services)
 - [Data Ingestion Pipeline](#data-ingestion-pipeline)
@@ -106,7 +107,7 @@ The hybrid approach combines semantic similarity with keyword matching. It does 
 | Python 3.12 | Application runtime |
 | `uv` | Python dependency and environment management |
 | Streamlit | User interface |
-| vLLM | OpenAI-compatible inference endpoints |
+| vLLM or Ollama | OpenAI-compatible inference endpoints |
 | Qwen2.5-0.5B-Instruct | Answer-generation model |
 | Qwen3-Embedding-0.6B | Embedding model |
 | Qwen3Guard-Gen-0.6B | Safety classification |
@@ -125,6 +126,7 @@ Install the following before starting:
 - Docker Compose V2
 - `uv`, the Python package and project manager
 - `curl`
+- Ollama, only when using the host-Ollama workflow
 
 The model-serving containers require sufficient CPU memory and compute resources. Model downloads may take time on the first startup. The Compose configuration also specifies CPU affinity for model services; review the CPU settings if your machine has fewer available CPU cores.
 
@@ -307,11 +309,94 @@ On the first startup, vLLM may need time to download and initialize the models. 
 
 ### Alternative: use the setup script
 
-The repository includes a `setup.sh` script that automates several preparation steps, including checking prerequisites, building the application image, starting Qdrant and the embedding service, extracting legal records, and indexing them.
+The default setup script configures the vLLM workflow, builds `rag-app`, starts Qdrant and the vLLM embedding service, extracts the legal records, and indexes them:
 
-Review the script before using it. In particular, the current script attempts to retrieve `example.env` from `origin/dev` if `.env` is missing, and it expects the local dataset to be present.
+```bash
+./setup.sh
+```
 
-For the `dev-data` branch, the explicit installation steps above avoid accidentally taking configuration from another branch.
+It creates `.env` from the repository's local `example.env` when needed and writes the required vLLM endpoint/model values. The source dataset must already exist at `data/egyptian_civil_law_131_1948.html`.
+
+## Running with Ollama
+
+This workflow runs Ollama directly on the host and runs only Qdrant and `rag-app` in Docker. It uses `docker-compose-ollama.yml`; no vLLM model containers are started.
+
+### Ollama prerequisites
+
+1. Install [Ollama](https://ollama.com/download).
+2. Start the Ollama application or `ollama serve`.
+3. Confirm it is listening on its default address:
+
+```bash
+curl -fsS http://localhost:11434/api/version
+```
+
+The default Ollama models are:
+
+| Purpose | Model |
+|---|---|
+| Chat | `qwen2.5:0.5b` |
+| Embeddings | `Qwen3-Embedding:0.6b` |
+| Safety guard | `sileader/qwen3guard:0.6b` |
+
+`Qwen3Guard` has no official Ollama library entry. The default guard tag is a community package; review its provenance before using it with sensitive data. Override any tag with `OLLAMA_CHAT_MODEL`, `OLLAMA_EMBEDDING_MODEL`, or `OLLAMA_GUARD_MODEL` before running setup.
+
+### Automated Ollama setup
+
+```bash
+./setup-ollama.sh
+```
+
+The script:
+
+1. Verifies that Ollama is installed and reachable on `localhost:11434`.
+2. Creates `.env` from `example.env` if needed.
+3. Writes all required Ollama model, endpoint, API-key, embedding compatibility, and Qdrant collection values to `.env`.
+4. Pulls missing models. Set `OLLAMA_PULL_MODELS=false` to skip automatic pulls.
+5. Runs the shared setup workflow with `docker-compose-ollama.yml`.
+6. Uses `localhost:11434` for host-side ingestion and `host.docker.internal:11434` for `rag-app` inside Docker.
+
+After setup, start the complete Ollama stack:
+
+```bash
+docker compose -f docker-compose-ollama.yml up -d
+```
+
+If application source code changed, rebuild `rag-app` explicitly:
+
+```bash
+docker compose -f docker-compose-ollama.yml up -d --build rag-app
+```
+
+To switch back to vLLM, run `./setup.sh`; it restores the required vLLM values in `.env`. Do not run both Compose stacks simultaneously because they share container names, ports, and the `rag-net` network.
+
+### Ollama environment written by setup
+
+```dotenv
+OLLAMA_CHAT_MODEL=qwen2.5:0.5b
+OLLAMA_EMBEDDING_MODEL=Qwen3-Embedding:0.6b
+OLLAMA_GUARD_MODEL=sileader/qwen3guard:0.6b
+
+CHATBOT_MODEL=qwen2.5:0.5b
+CHATBOT_SERVER=http://localhost
+CHATBOT_SERVER_PORT=11434
+CHATBOT_API_KEY=ollama
+
+EMBEDDING_MODEL=Qwen3-Embedding:0.6b
+EMBEDDING_MODEL_SERVER=http://localhost
+EMBEDDING_MODEL_SERVER_PORT=11434
+EMBEDDING_MODEL_API_KEY=ollama
+EMBEDDING_CHECK_CTX_LENGTH=false
+
+GUARD_MODEL=sileader/qwen3guard:0.6b
+GUARD_MODEL_SERVER=http://localhost
+GUARD_MODEL_SERVER_PORT=11434
+GUARD_MODEL_API_KEY=ollama
+
+QDRANT_COLLECTION=Egyptian_Civil_Law_131
+```
+
+The Ollama Compose file overrides the three model server hostnames with `host.docker.internal`, because `localhost` inside `rag-app` refers to the container itself. The `.env` `localhost` values are used by scripts executed directly on the host.
 
 ## Starting and Stopping the Services
 
@@ -355,6 +440,16 @@ docker compose -f docker-compose-dev.yml down --volumes
 
 **Caution:** removing volumes can permanently delete the indexed legal collection, cached models, and stored MLflow data.
 
+For the Ollama workflow, use the same commands with `docker-compose-ollama.yml`, for example:
+
+```bash
+docker compose -f docker-compose-ollama.yml ps
+docker compose -f docker-compose-ollama.yml logs -f rag-app
+docker compose -f docker-compose-ollama.yml down
+```
+
+Stopping the Ollama Compose stack does not stop the host Ollama application.
+
 ## Accessing the Services
 
 After the containers have started successfully, access the services using the following local URLs.
@@ -368,6 +463,7 @@ After the containers have started successfully, access the services using the fo
 | Chat model API | [http://localhost:8000/v1/models](http://localhost:8000/v1/models) | Inspect the chat model served by vLLM. |
 | Embedding API | [http://localhost:8001/v1/models](http://localhost:8001/v1/models) | Inspect the embedding model served by vLLM. |
 | Guard model API | [http://localhost:8002/v1/models](http://localhost:8002/v1/models) | Inspect the safety model served by vLLM. |
+| Ollama API (Ollama workflow) | [http://localhost:11434/v1/models](http://localhost:11434/v1/models) | Inspect models served by host Ollama. |
 | MLflow | [http://localhost:5000](http://localhost:5000) | View experiments, runs, and artifacts. |
 
 The Langfuse web interface is not included in the current `docker-compose-dev.yml` service list. Setting Langfuse environment variables alone does not start a Langfuse deployment. If you configure a separate Langfuse deployment, use its actual URL and valid project credentials.
@@ -478,12 +574,13 @@ http://llm:8000/v1
 | `EMBEDDING_MODEL_SERVER` | `http://embedding` | Host or base URL of the embedding service. |
 | `EMBEDDING_MODEL_SERVER_PORT` | `8000` | Internal port of the embedding service. |
 | `EMBEDDING_MODEL_API_KEY` | `dumb` | API key passed to the embedding endpoint. This is a development placeholder. |
+| `EMBEDDING_CHECK_CTX_LENGTH` | `true` | Keeps LangChain's token-length preprocessing for vLLM. Set to `false` for Ollama so embedding requests contain text rather than token-ID arrays. |
 
 The application builds the embedding API base URL using the server, port, and `/v1` suffix.
 
 **Important:** query embeddings and stored document embeddings must use a compatible model and vector dimension. Changing the embedding model generally requires rebuilding the Qdrant collection by re-embedding the documents.
 
-The current ingestion script uses hardcoded model and endpoint values, so changing these environment variables alone does not reconfigure ingestion.
+The ingestion script reads these variables from `.env`. During automated setup, the scripts provide host-reachable endpoint values explicitly: port `8001` for vLLM or port `11434` for Ollama.
 
 ### 3. Guard model endpoint
 
@@ -668,6 +765,27 @@ docker compose -f docker-compose-dev.yml logs --tail=100 rag-app
 ```
 
 Verify that `.env` contains the expected Streamlit port and entry-point path.
+
+### Ollama is unavailable or rejects embeddings
+
+Confirm host Ollama and the configured models:
+
+```bash
+curl -fsS http://localhost:11434/api/version
+curl -fsS http://localhost:11434/v1/models
+ollama list
+```
+
+Inside Docker, `rag-app` must use `http://host.docker.internal:11434`; host-side ingestion uses `http://localhost:11434`. For Ollama embeddings, `EMBEDDING_CHECK_CTX_LENGTH` must be `false`, otherwise LangChain sends token-ID arrays and Ollama responds with `invalid input type`.
+
+Inspect the resolved Ollama Compose configuration without printing `.env` secrets:
+
+```bash
+docker compose -f docker-compose-ollama.yml config --services
+docker compose -f docker-compose-ollama.yml exec rag-app printenv EMBEDDING_CHECK_CTX_LENGTH
+```
+
+If code changed after the image was built, rebuild `rag-app`; a restart alone does not copy updated source into the image.
 
 ### The chat model does not respond
 
