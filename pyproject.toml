@@ -1,0 +1,43 @@
+[project]
+name = "app"
+version = "0.1.0"
+description = "Add your description here"
+authors = [
+    { name = "Ahmed", email = "atarekmokhtar90@gmail.com" }
+]
+requires-python = ">=3.12"
+dependencies = [
+    "dvc[gdrive]>=3.67.1",
+    "guardrails-ai>=0.11.0",
+    "langchain-community==0.4.1",
+    "langchain-openai>=1.6.3",
+    "langfuse>=4.17.0",
+    "lxml>=6.1.2",
+    "mlflow>=3.17.0,<3.18.0",
+    "pymupdf>=1.28.2",
+    "qdrant-client>=1.19.0",
+    "ragas>=0.4.3",
+    "rank-bm25>=0.2.2",
+    "requests>=2.34.2",
+    "streamlit>=1.63.0",
+]
+
+[project.scripts]
+app = "app:main"
+
+[build-system]
+requires = ["uv_build>=0.12.5,<0.13.0"]
+build-backend = "uv_build"
+
+[dependency-groups]
+dev = [
+    "coverage>=7.16.0",
+    "mypy>=2.3.1",
+    "pre-commit>=4.6.2",
+    "pytest>=9.1.1",
+    "pytest-cov>=7.1.0",
+    "pytest-html-plus>=1.2.0",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/app"]

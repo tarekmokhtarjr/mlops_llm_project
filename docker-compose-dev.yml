@@ -1,0 +1,153 @@
+services:
+  # --------------------------------------------------
+  # Application infrastructure
+  # --------------------------------------------------
+
+  qdrant:
+    image: qdrant/qdrant:latest
+    container_name: qdrant-db
+    restart: unless-stopped
+    ports:
+      - "6333:6333"
+      - "6334:6334"
+    volumes:
+      - ./qdrant_storage:/qdrant/storage
+    networks:
+      - rag-net
+
+  rag-app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: rag-app
+    env_file:
+      - .env
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    volumes:
+      - .src/app/evaluation/datasets:/app/evaluation/datasets:ro
+    ports:
+      - "${STREAMLIT_PORT}:${STREAMLIT_PORT}"
+    command:
+      - sh
+      - -c
+      - >
+        uv run streamlit run ${STREAMLIT_APP_PATH}
+        --server.address=${STREAMLIT_URL}
+        --server.port=${STREAMLIT_PORT}
+    restart: unless-stopped
+    networks:
+      - rag-net
+
+  llm_guard:
+    image: vllm/vllm-openai-cpu:v0.29.0
+    container_name: qwen3-guard
+    restart: unless-stopped
+    ports:
+      - "8002:8000"
+    volumes:
+      - hf_cache:/root/.cache/huggingface
+    environment:
+      VLLM_CPU_KVCACHE_SPACE: "2"
+      VLLM_ENABLE_V1_MULTIPROCESSING: "0"
+      VLLM_LOGGING_LEVEL: "INFO"
+    command:
+      - "Qwen/Qwen3Guard-Gen-0.6B"
+      - "--served-model-name"
+      - "Qwen/Qwen3Guard-Gen-0.6B"
+      - "--host"
+      - "0.0.0.0"
+      - "--port"
+      - "8000"
+      - "--max-model-len"
+      - "10000"
+    security_opt:
+      - seccomp=unconfined
+    cap_add:
+      - SYS_NICE
+    networks:
+      - rag-net
+
+  embedding:
+    image: vllm/vllm-openai-cpu:v0.29.0
+    container_name: qwen3-embedding
+    restart: unless-stopped
+    ports:
+      - "8001:8000"
+    volumes:
+      - hf_cache:/root/.cache/huggingface
+    environment:
+      VLLM_CPU_KVCACHE_SPACE: "1"
+      VLLM_ENABLE_V1_MULTIPROCESSING: "0"
+      VLLM_LOGGING_LEVEL: "INFO"
+    command:
+      - "Qwen/Qwen3-Embedding-0.6B"
+      - "--served-model-name"
+      - "Qwen/Qwen3-Embedding-0.6B"
+      - "--runner"
+      - "pooling"
+      - "--host"
+      - "0.0.0.0"
+      - "--port"
+      - "8000"
+      - "--max-model-len"
+      - "2048"
+    security_opt:
+      - seccomp=unconfined
+    cap_add:
+      - SYS_NICE
+    networks:
+      - rag-net
+
+  llm:
+    image: vllm/vllm-openai-cpu:v0.29.0
+    container_name: qwen2.5-0.5b
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    volumes:
+      - hf_cache:/root/.cache/huggingface
+    environment:
+      VLLM_CPU_KVCACHE_SPACE: "1"
+      VLLM_LOGGING_LEVEL: "INFO"
+    command:
+      - "Qwen/Qwen2.5-0.5B-Instruct"
+      - "--served-model-name"
+      - "Qwen/Qwen2.5-0.5B-Instruct"
+      - "--dtype"
+      - "bfloat16"
+      - "--host"
+      - "0.0.0.0"
+      - "--port"
+      - "8000"
+      - "--max-model-len"
+      - "10000"
+      - "--gpu-memory-utilization"
+      - "0.95"
+    security_opt:
+      - seccomp=unconfined
+    cap_add:
+      - SYS_NICE
+    shm_size: "2g"
+    networks:
+      - rag-net
+
+# ----------------------------------------------------
+# Persistent volumes
+# ----------------------------------------------------
+
+volumes:
+  hf_cache:
+    name: rag_hf_cache
+
+  mlflow_data:
+    name: rag_mlflow_data
+
+# ----------------------------------------------------
+# Shared network
+# ----------------------------------------------------
+
+networks:
+  rag-net:
+    name: rag-net
+    driver: bridge

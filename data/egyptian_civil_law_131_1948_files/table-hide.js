@@ -1,0 +1,9 @@
+$(".tables_edits").click(function(){
+		  $(".new_hide").toggleClass("hide_me");
+		});
+		  $(".tables_edits").click(function(){
+		  $(".increase_size").toggleClass("size_me");
+		});
+		  $(".tables_edits").click(function(){
+		  $(".tables_edits").toggleClass("new_styles");
+		});

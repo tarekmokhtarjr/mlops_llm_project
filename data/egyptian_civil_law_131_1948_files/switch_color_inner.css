@@ -1,0 +1,22 @@
+﻿/*	----------------------------------------------------------
+	Color Switch inner pages
+= = = = = = = = = = = = = = = = = = = = = = = = = = = = = = */
+
+.colors_header {
+    display: inline-block;
+    float: left;
+}
+
+.colors_header .colors-list {
+    padding: 7px 7px 0;
+    margin: 0;
+    margin-left: 8px;
+}
+
+.palate {
+    height: 29px;
+    margin: 0;
+    width: 29px;
+    padding: 0;
+    border: 1px solid #fff;
+}
