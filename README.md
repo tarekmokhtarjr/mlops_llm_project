@@ -146,6 +146,27 @@ Ensure Docker is running before proceeding.
 
 ## Installation
 
+The project provides two setup scripts. Both automate the same workflow: prepare `.env`, build the `rag-app` image, synchronize the host dependencies, start Qdrant, extract and index the legal dataset, and print the command that starts the complete stack. They differ only in the model-serving backend.
+
+| Script | Inference backend | Compose file | Model services |
+|---|---|---|---|
+| `setup.sh` | vLLM containers | `docker-compose-dev.yml` | Chat, embedding, and guard models run as vLLM containers in Docker. |
+| `setup-ollama.sh` | Ollama on the host | `docker-compose-ollama.yml` | No vLLM containers; only Qdrant and `rag-app` run in Docker, and the models are served by host Ollama. |
+
+Use `setup.sh` for the fully containerized vLLM stack. Use `setup-ollama.sh` when you want the same application to run against an Ollama installation on the host instead of vLLM containers.
+
+Both scripts:
+
+1. Verify the required tools (`setup-ollama.sh` also verifies that Ollama is reachable).
+2. Create `.env` from `example.env` when it does not exist; an existing `.env` is preserved and only the backend-specific values are rewritten.
+3. Build the `rag-app` Docker image.
+4. Run `uv sync --no-dev` to install the host-side dependencies used for ingestion.
+5. Start Qdrant, plus the vLLM embedding container in the vLLM workflow, and wait for Qdrant and the embedding endpoint to respond.
+6. Extract the legal provisions from the source HTML and validate the generated JSON.
+7. Embed the provisions and store them in the `Egyptian_Civil_Law_131` Qdrant collection.
+
+Ingestion re-creates the collection, so the stored vectors always match the embedding model of the selected backend. This matters when you switch between vLLM and Ollama, because the two workflows use different embedding models.
+
 ### 1. Clone the repository
 
 ```bash
@@ -153,7 +174,82 @@ git clone --branch dev-data https://github.com/tarekmokhtarjr/mlops_llm_project.
 cd mlops_llm_project
 ```
 
-### 2. Configure environment variables
+### 2. Provide the legal dataset
+
+The setup scripts do not download the dataset. The source HTML file must already exist before you run either script:
+
+```text
+data/egyptian_civil_law_131_1948.html
+```
+
+Verify it:
+
+```bash
+test -s data/egyptian_civil_law_131_1948.html \
+  && echo "Dataset found" \
+  || echo "Dataset is missing"
+```
+
+### 3. Run the setup script for your inference backend
+
+#### vLLM containers (default)
+
+```bash
+./setup.sh
+```
+
+This configures the vLLM workflow: it writes the vLLM model and endpoint values to `.env`, builds the `rag-app` image, starts Qdrant and the vLLM embedding service for ingestion, and indexes the dataset. The first run downloads the models and can take several minutes; the script waits up to 15 minutes by default for the endpoints (`MAX_WAIT_SECONDS`).
+
+#### Ollama on the host
+
+Install [Ollama](https://ollama.com/download), start it, and confirm it is reachable:
+
+```bash
+curl -fsS http://localhost:11434/api/version
+```
+
+Then run:
+
+```bash
+./setup-ollama.sh
+```
+
+This script writes the Ollama model, endpoint, API-key, and embedding compatibility values to `.env`, pulls any missing models, and then delegates to the shared setup workflow with `docker-compose-ollama.yml`. It does not start vLLM containers. Set `OLLAMA_PULL_MODELS=false` to skip the automatic model pulls.
+
+See [Running with Ollama](#running-with-ollama) for the default model tags and the environment values the script writes.
+
+### 4. Start the complete stack
+
+After the setup script finishes, start the full application with the Compose file for your backend:
+
+```bash
+# vLLM
+docker compose -f docker-compose-dev.yml up -d
+
+# Ollama
+docker compose -f docker-compose-ollama.yml up -d
+```
+
+The vLLM stack starts Qdrant, `rag-app`, and the three vLLM model services. On the first startup, wait until the chat, embedding, and guard endpoints respond before using the application. See [Accessing the Services](#accessing-the-services) for the endpoint URLs.
+
+The Ollama stack starts Qdrant and `rag-app` only; the models remain in the host Ollama instance.
+
+### Switching between backends
+
+- Run `./setup.sh` to switch to vLLM, or `./setup-ollama.sh` to switch to Ollama.
+- Re-running a setup script rewrites only its backend-specific keys in `.env`; other settings are kept.
+- Both scripts re-extract and re-index the dataset. This is required, because the embedding model changes with the backend.
+- Do not run both Compose stacks at the same time. They share container names, ports, and the `rag-net` network. Stop one before starting the other:
+
+```bash
+docker compose -f docker-compose-dev.yml down
+```
+
+### Manual installation
+
+The manual procedure below is the advanced alternative to the setup scripts. Use it when you need to inspect or customize each step.
+
+#### 1. Configure environment variables
 
 Create the local environment file from the example:
 
@@ -167,7 +263,7 @@ The example values are development defaults. Replace exposed or reused credentia
 
 Do not commit `.env` or production credentials to Git.
 
-### 3. Install Python dependencies
+#### 2. Install Python dependencies
 
 ```bash
 uv sync
@@ -181,7 +277,7 @@ To install only production dependencies:
 uv sync --no-dev
 ```
 
-### 4. Prepare the legal dataset
+#### 3. Prepare the legal dataset
 
 The data-ingestion workflow expects the source HTML file:
 
@@ -203,7 +299,7 @@ test -s data/egyptian_civil_law_131_1948.html \
   || echo "Dataset is missing"
 ```
 
-### 5. Start Qdrant and the embedding service
+#### 4. Start Qdrant and the embedding service
 
 The ingestion process needs Qdrant and the embedding model to be available.
 
@@ -231,7 +327,7 @@ Check the embedding model endpoint:
 curl -fsS http://localhost:8001/v1/models
 ```
 
-### 6. Extract the legal provisions
+#### 5. Extract the legal provisions
 
 Run the extraction script:
 
@@ -258,7 +354,7 @@ print(f"Validated {len(records)} legal records.")
 '
 ```
 
-### 7. Embed and index the legal provisions
+#### 6. Embed and index the legal provisions
 
 Run the ingestion script:
 
@@ -277,7 +373,7 @@ This script:
 
 The ingestion script currently contains its own endpoint, model, Qdrant host, port, and collection constants. If you change the corresponding environment variables, update the ingestion script as well or the ingestion process may continue using its hardcoded values.
 
-### 8. Start the complete application stack
+#### 7. Start the complete application stack
 
 Once ingestion is complete, start the remaining services:
 
@@ -306,16 +402,6 @@ docker compose -f docker-compose-dev.yml logs -f llm_guard
 ```
 
 On the first startup, vLLM may need time to download and initialize the models. Wait until the model APIs are ready before submitting a question through Streamlit.
-
-### Alternative: use the setup script
-
-The default setup script configures the vLLM workflow, builds `rag-app`, starts Qdrant and the vLLM embedding service, extracts the legal records, and indexes them:
-
-```bash
-./setup.sh
-```
-
-It creates `.env` from the repository's local `example.env` when needed and writes the required vLLM endpoint/model values. The source dataset must already exist at `data/egyptian_civil_law_131_1948.html`.
 
 ## Running with Ollama
 
@@ -899,10 +985,12 @@ mlops_llm_project/
 │   │   └── embed_and_store_data.py
 │   └── streamlit_app.py
 ├── docker-compose-dev.yml
+├── docker-compose-ollama.yml
 ├── Dockerfile
 ├── example.env
 ├── pyproject.toml
 ├── setup.sh
+├── setup-ollama.sh
 ├── egyptian_law_rag_architecture.drawio
 └── README.md
 ```
