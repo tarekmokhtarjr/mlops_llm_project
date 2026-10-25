@@ -22,3 +22,9 @@ uv.lock
 htmlcov/
 report_output/
 test_results.txt
+
+# Evaluation and MLflow artifacts (repository root only)
+/evaluation/
+/logs/
+/mlartifacts-ollama/
+/mlflow-ollama.db

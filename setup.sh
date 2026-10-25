@@ -68,6 +68,9 @@ wait_for_url() {
         if (( SECONDS >= deadline )); then
             docker compose -f "$COMPOSE_FILE" ps
             docker compose -f "$COMPOSE_FILE" logs --tail=80 qdrant
+            if [[ "$INFERENCE_BACKEND" == "ollama" ]]; then
+                docker compose -f "$COMPOSE_FILE" logs --tail=80 ollama
+            fi
             fail "$description did not become ready within ${MAX_WAIT_SECONDS}s."
         fi
 
@@ -163,8 +166,8 @@ if [[ "$INFERENCE_BACKEND" == "vllm" ]]; then
     log "Starting Qdrant and the vLLM embedding service."
     docker compose -f "$COMPOSE_FILE" up -d qdrant embedding
 else
-    log "Starting Qdrant. Ollama remains on the host machine."
-    docker compose -f "$COMPOSE_FILE" up -d qdrant
+    log "Starting Qdrant and the Ollama container."
+    docker compose -f "$COMPOSE_FILE" up -d qdrant ollama
 fi
 
 wait_for_url "$QDRANT_URL/healthz" "Qdrant"

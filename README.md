@@ -1,6 +1,6 @@
 # Egyptian Civil Code RAG
 
-A containerized Retrieval-Augmented Generation (RAG) application for asking questions about the Egyptian Civil Code, Law No. 131 of 1948. The application retrieves legal provisions from a Qdrant vector database and uses Qwen models served through vLLM or host Ollama to generate answers grounded in the retrieved legal text.
+A containerized Retrieval-Augmented Generation (RAG) application for asking questions about the Egyptian Civil Code, Law No. 131 of 1948. The application retrieves legal provisions from a Qdrant vector database and uses Qwen models served through vLLM or Ollama to generate answers grounded in the retrieved legal text.
 
 The project also includes safety guardrails, MLflow experiment tracking, RAGAS-based evaluation tooling, and Langfuse integration settings for observability.
 
@@ -126,7 +126,8 @@ Install the following before starting:
 - Docker Compose V2
 - `uv`, the Python package and project manager
 - `curl`
-- Ollama, only when using the host-Ollama workflow
+
+Both model-serving workflows run in Docker. A host Ollama installation is not required for the Ollama workflow; it runs Ollama in a container.
 
 The model-serving containers require sufficient CPU memory and compute resources. Model downloads may take time on the first startup. The Compose configuration also specifies CPU affinity for model services; review the CPU settings if your machine has fewer available CPU cores.
 
@@ -151,17 +152,17 @@ The project provides two setup scripts. Both automate the same workflow: prepare
 | Script | Inference backend | Compose file | Model services |
 |---|---|---|---|
 | `setup.sh` | vLLM containers | `docker-compose-dev.yml` | Chat, embedding, and guard models run as vLLM containers in Docker. |
-| `setup-ollama.sh` | Ollama on the host | `docker-compose-ollama.yml` | No vLLM containers; only Qdrant and `rag-app` run in Docker, and the models are served by host Ollama. |
+| `setup-ollama.sh` | Ollama container | `docker-compose-ollama.yml` | Chat, embedding, and guard models run in an Ollama container; Qdrant and `rag-app` also run in Docker. |
 
-Use `setup.sh` for the fully containerized vLLM stack. Use `setup-ollama.sh` when you want the same application to run against an Ollama installation on the host instead of vLLM containers.
+Use `setup.sh` for the vLLM stack. Use `setup-ollama.sh` to run the same application with Ollama inside Docker instead of vLLM. Both workflows are fully containerized, and neither requires a host Ollama installation.
 
 Both scripts:
 
-1. Verify the required tools (`setup-ollama.sh` also verifies that Ollama is reachable).
+1. Verify the required tools. `setup-ollama.sh` also starts the Ollama container and waits for it to become ready.
 2. Create `.env` from `example.env` when it does not exist; an existing `.env` is preserved and only the backend-specific values are rewritten.
 3. Build the `rag-app` Docker image.
 4. Run `uv sync --no-dev` to install the host-side dependencies used for ingestion.
-5. Start Qdrant, plus the vLLM embedding container in the vLLM workflow, and wait for Qdrant and the embedding endpoint to respond.
+5. Start Qdrant plus the model service needed for ingestion: the vLLM embedding container or the Ollama container. Wait for Qdrant and the embedding endpoint to respond.
 6. Extract the legal provisions from the source HTML and validate the generated JSON.
 7. Embed the provisions and store them in the `Egyptian_Civil_Law_131` Qdrant collection.
 
@@ -200,21 +201,15 @@ test -s data/egyptian_civil_law_131_1948.html \
 
 This configures the vLLM workflow: it writes the vLLM model and endpoint values to `.env`, builds the `rag-app` image, starts Qdrant and the vLLM embedding service for ingestion, and indexes the dataset. The first run downloads the models and can take several minutes; the script waits up to 15 minutes by default for the endpoints (`MAX_WAIT_SECONDS`).
 
-#### Ollama on the host
-
-Install [Ollama](https://ollama.com/download), start it, and confirm it is reachable:
-
-```bash
-curl -fsS http://localhost:11434/api/version
-```
-
-Then run:
+#### Ollama container
 
 ```bash
 ./setup-ollama.sh
 ```
 
-This script writes the Ollama model, endpoint, API-key, and embedding compatibility values to `.env`, pulls any missing models, and then delegates to the shared setup workflow with `docker-compose-ollama.yml`. It does not start vLLM containers. Set `OLLAMA_PULL_MODELS=false` to skip the automatic model pulls.
+This script starts the Ollama container, pulls the required models into its Docker volume, writes the Ollama model, endpoint, API-key, and embedding compatibility values to `.env`, and then delegates to the shared setup workflow with `docker-compose-ollama.yml`. It does not start vLLM containers and does not use a host Ollama installation. Set `OLLAMA_PULL_MODELS=false` to skip the automatic model pulls.
+
+If a host Ollama instance is already listening on port `11434`, stop it before running the script (`sudo systemctl stop ollama`) or choose another host port with `OLLAMA_HOST_PORT=11435 ./setup-ollama.sh`.
 
 See [Running with Ollama](#running-with-ollama) for the default model tags and the environment values the script writes.
 
@@ -232,7 +227,7 @@ docker compose -f docker-compose-ollama.yml up -d
 
 The vLLM stack starts Qdrant, `rag-app`, and the three vLLM model services. On the first startup, wait until the chat, embedding, and guard endpoints respond before using the application. See [Accessing the Services](#accessing-the-services) for the endpoint URLs.
 
-The Ollama stack starts Qdrant and `rag-app` only; the models remain in the host Ollama instance.
+The Ollama stack starts Qdrant, `rag-app`, and the `ollama` container. A one-shot `ollama-pull` service checks that the three models exist before `rag-app` starts. Model files persist in the `rag_ollama_models` volume.
 
 ### Switching between backends
 
@@ -244,6 +239,8 @@ The Ollama stack starts Qdrant and `rag-app` only; the models remain in the host
 ```bash
 docker compose -f docker-compose-dev.yml down
 ```
+
+- Only the Ollama stack publishes port `11434`. If host Ollama is installed and enabled, stop it first to avoid a port conflict.
 
 ### Manual installation
 
@@ -405,17 +402,20 @@ On the first startup, vLLM may need time to download and initialize the models. 
 
 ## Running with Ollama
 
-This workflow runs Ollama directly on the host and runs only Qdrant and `rag-app` in Docker. It uses `docker-compose-ollama.yml`; no vLLM model containers are started.
+This workflow runs Ollama, Qdrant, and `rag-app` in Docker using `docker-compose-ollama.yml`. No host Ollama installation is required, and no vLLM containers are started.
 
-### Ollama prerequisites
+### Ollama container
 
-1. Install [Ollama](https://ollama.com/download).
-2. Start the Ollama application or `ollama serve`.
-3. Confirm it is listening on its default address:
+The Compose file defines these services:
 
-```bash
-curl -fsS http://localhost:11434/api/version
-```
+| Service | Purpose |
+|---|---|
+| `ollama` | Serves the chat, embedding, and guard models on port `11434`. |
+| `ollama-pull` | One-shot helper that pulls missing models before `rag-app` starts. |
+| `rag-app` | Streamlit UI and RAG pipeline; calls `http://ollama:11434`. |
+| `qdrant` | Vector database. |
+
+Model files persist in the `rag_ollama_models` Docker volume. The first startup downloads the models; later starts reuse the volume.
 
 The default Ollama models are:
 
@@ -435,18 +435,26 @@ The default Ollama models are:
 
 The script:
 
-1. Verifies that Ollama is installed and reachable on `localhost:11434`.
+1. Starts the `ollama` container and waits for it to become ready.
 2. Creates `.env` from `example.env` if needed.
 3. Writes all required Ollama model, endpoint, API-key, embedding compatibility, and Qdrant collection values to `.env`.
-4. Pulls missing models. Set `OLLAMA_PULL_MODELS=false` to skip automatic pulls.
+4. Pulls missing models into the Ollama volume. Set `OLLAMA_PULL_MODELS=false` to skip automatic pulls.
 5. Runs the shared setup workflow with `docker-compose-ollama.yml`.
-6. Uses `localhost:11434` for host-side ingestion and `host.docker.internal:11434` for `rag-app` inside Docker.
+6. Uses `localhost:11434` for host-side ingestion and `http://ollama:11434` for `rag-app` inside Docker.
+
+The Ollama container publishes port `11434` on the host. If a host Ollama instance is already using that port, stop it first (`sudo systemctl stop ollama`) or run setup with a different port:
+
+```bash
+OLLAMA_HOST_PORT=11435 ./setup-ollama.sh
+```
 
 After setup, start the complete Ollama stack:
 
 ```bash
 docker compose -f docker-compose-ollama.yml up -d
 ```
+
+The one-shot `ollama-pull` service runs again and exits after confirming that the models are present, so `rag-app` does not start until the model volume is ready.
 
 If application source code changed, rebuild `rag-app` explicitly:
 
@@ -462,6 +470,8 @@ To switch back to vLLM, run `./setup.sh`; it restores the required vLLM values i
 OLLAMA_CHAT_MODEL=qwen2.5:0.5b
 OLLAMA_EMBEDDING_MODEL=Qwen3-Embedding:0.6b
 OLLAMA_GUARD_MODEL=sileader/qwen3guard:0.6b
+OLLAMA_PULL_MODELS=true
+OLLAMA_HOST_PORT=11434
 
 CHATBOT_MODEL=qwen2.5:0.5b
 CHATBOT_SERVER=http://localhost
@@ -482,7 +492,15 @@ GUARD_MODEL_API_KEY=ollama
 QDRANT_COLLECTION=Egyptian_Civil_Law_131
 ```
 
-The Ollama Compose file overrides the three model server hostnames with `host.docker.internal`, because `localhost` inside `rag-app` refers to the container itself. The `.env` `localhost` values are used by scripts executed directly on the host.
+The Ollama Compose file overrides the three model server hostnames with `http://ollama`, because `localhost` inside `rag-app` refers to the container itself. The `.env` `localhost` values are used by scripts executed directly on the host, including ingestion.
+
+### Ollama GPU access
+
+The `ollama` service uses CPU by default. To use an NVIDIA GPU, install the NVIDIA Container Toolkit and uncomment the `deploy.resources.reservations.devices` block for the `ollama` service in `docker-compose-ollama.yml`, then recreate the container:
+
+```bash
+docker compose -f docker-compose-ollama.yml up -d --force-recreate ollama
+```
 
 ## Starting and Stopping the Services
 
@@ -534,7 +552,7 @@ docker compose -f docker-compose-ollama.yml logs -f rag-app
 docker compose -f docker-compose-ollama.yml down
 ```
 
-Stopping the Ollama Compose stack does not stop the host Ollama application.
+Stopping the Ollama Compose stack stops the Ollama container as well. The downloaded models remain in the `rag_ollama_models` volume and are reused on the next start.
 
 ## Accessing the Services
 
@@ -549,7 +567,7 @@ After the containers have started successfully, access the services using the fo
 | Chat model API | [http://localhost:8000/v1/models](http://localhost:8000/v1/models) | Inspect the chat model served by vLLM. |
 | Embedding API | [http://localhost:8001/v1/models](http://localhost:8001/v1/models) | Inspect the embedding model served by vLLM. |
 | Guard model API | [http://localhost:8002/v1/models](http://localhost:8002/v1/models) | Inspect the safety model served by vLLM. |
-| Ollama API (Ollama workflow) | [http://localhost:11434/v1/models](http://localhost:11434/v1/models) | Inspect models served by host Ollama. |
+| Ollama API (Ollama workflow) | [http://localhost:11434/v1/models](http://localhost:11434/v1/models) | Inspect models served by the Ollama container. |
 | MLflow | [http://localhost:5000](http://localhost:5000) | View experiments, runs, and artifacts. |
 
 The Langfuse web interface is not included in the current `docker-compose-dev.yml` service list. Setting Langfuse environment variables alone does not start a Langfuse deployment. If you configure a separate Langfuse deployment, use its actual URL and valid project credentials.
@@ -652,6 +670,8 @@ For the default Compose network, the resulting URL is:
 http://llm:8000/v1
 ```
 
+In the Ollama workflow, `setup-ollama.sh` writes `CHATBOT_SERVER=http://localhost` and `CHATBOT_SERVER_PORT=11434` to `.env` for host-side use, while `docker-compose-ollama.yml` overrides the server to `http://ollama` inside `rag-app`.
+
 ### 2. Embedding model
 
 | Variable | Example | Description |
@@ -666,7 +686,7 @@ The application builds the embedding API base URL using the server, port, and `/
 
 **Important:** query embeddings and stored document embeddings must use a compatible model and vector dimension. Changing the embedding model generally requires rebuilding the Qdrant collection by re-embedding the documents.
 
-The ingestion script reads these variables from `.env`. During automated setup, the scripts provide host-reachable endpoint values explicitly: port `8001` for vLLM or port `11434` for Ollama.
+The ingestion script reads these variables from `.env`. During automated setup, the scripts provide host-reachable endpoint values explicitly: port `8001` for vLLM or the published Ollama port (`11434` by default, configurable with `OLLAMA_HOST_PORT`) for the Ollama workflow. Inside `rag-app`, the Ollama Compose file uses `http://ollama:11434`.
 
 ### 3. Guard model endpoint
 
@@ -677,6 +697,8 @@ The ingestion script reads these variables from `.env`. During automated setup, 
 | `GUARD_MODEL_API_KEY` | `dumb` | API key passed by the guard client. |
 
 The guard client uses these variables to build its OpenAI-compatible endpoint. The internal port is `8000`; from the host, the Compose configuration publishes the guard service on port `8002`.
+
+In the Ollama workflow, the guard is served by the `ollama` container. `setup-ollama.sh` writes `GUARD_MODEL_SERVER=http://localhost` and `GUARD_MODEL_SERVER_PORT=11434` to `.env` for host-side use, and `docker-compose-ollama.yml` overrides the server to `http://ollama` inside `rag-app`. If the guard endpoint is unreachable, the chat request fails before any safety classification happens.
 
 ### 4. Guard container configuration
 
@@ -749,9 +771,20 @@ The experiment name is a convention for client code; setting the variable does n
 
 | Variable | Example | Description |
 |---|---|---|
-| `RAGAS_JUDGE_MAX_TOKENS` | `2048` | Intended maximum token budget for the LLM judge's generated output during evaluation. |
+| `RAGAS_JUDGE_MAX_TOKENS` | `2048` | Maximum token budget for the LLM judge's generated output during evaluation. |
+| `RAGAS_JUDGE_MODEL` | `qwen2.5:1.5b` | Optional judge model override. Defaults to `CHATBOT_MODEL` when unset. |
 
-This variable is available for evaluation configuration. It only affects evaluation if the relevant RAGAS code reads and applies it.
+`RAGAS_JUDGE_MODEL` allows evaluation to use a stronger model than the runtime chat model. The Ollama evaluation script defaults it to `qwen2.5:1.5b` and pulls that model into the Ollama container when it is missing. A very small judge such as the default `qwen2.5:0.5b` chat model can loop in RAGAS structured-output prompts and fail with `IncompleteOutputException` or a `max_tokens` length limit.
+
+Run the Ollama evaluation with:
+
+```bash
+EVAL_LIMIT=12 ./scripts/run_ollama_ragas_mlflow.sh
+```
+
+The script disables Langfuse tracing by default because Langfuse is not part of the Ollama Compose stack. Set `LANGFUSE_ENABLED=true` to opt in when a reachable Langfuse deployment is available.
+
+`RAGAS_JUDGE_MAX_TOKENS` only affects evaluation if the RAGAS code reads and applies it.
 
 RAGAS evaluates RAG quality; it is not the runtime safety guard and does not automatically evaluate every user interaction.
 
@@ -822,6 +855,18 @@ The application needs a reachable Langfuse endpoint and valid project keys for t
 
 Also verify that the Streamlit request path invokes the tracing-enabled RAG generation flow. Defining credentials alone does not guarantee that every request will produce a trace.
 
+### 16. Ollama container
+
+| Variable | Example | Description |
+|---|---|---|
+| `OLLAMA_CHAT_MODEL` | `qwen2.5:0.5b` | Chat model tag pulled into the Ollama volume. |
+| `OLLAMA_EMBEDDING_MODEL` | `Qwen3-Embedding:0.6b` | Embedding model tag pulled into the Ollama volume. |
+| `OLLAMA_GUARD_MODEL` | `sileader/qwen3guard:0.6b` | Safety-guard model tag pulled into the Ollama volume. |
+| `OLLAMA_HOST_PORT` | `11434` | Host port that publishes the Ollama container. Change it if host Ollama already uses `11434`. |
+| `OLLAMA_PULL_MODELS` | `true` | Whether `setup-ollama.sh` and the `ollama-pull` service pull missing models. |
+
+These variables only affect the Ollama workflow. The `ollama` and `ollama-pull` services read the model tags, and `rag-app` uses them as its model names.
+
 ### Environment configuration summary
 
 | Variable group | Main responsibility |
@@ -830,6 +875,7 @@ Also verify that the Streamlit request path invokes the tracing-enabled RAG gene
 | Embedding model | Query-embedding endpoint and model |
 | Guard model | Safety-classification endpoint |
 | Guard container | Intended Docker and vLLM settings |
+| Ollama container | Model tags, published port, and automatic pulls |
 | Qdrant | Vector database connection and collection |
 | Streamlit | UI entry point and listening port |
 | MLflow | Tracking server and storage configuration |
@@ -854,15 +900,35 @@ Verify that `.env` contains the expected Streamlit port and entry-point path.
 
 ### Ollama is unavailable or rejects embeddings
 
-Confirm host Ollama and the configured models:
+Confirm that the Ollama container is running and that the models are present:
 
 ```bash
+docker compose -f docker-compose-ollama.yml ps
 curl -fsS http://localhost:11434/api/version
 curl -fsS http://localhost:11434/v1/models
-ollama list
+docker compose -f docker-compose-ollama.yml exec ollama ollama list
 ```
 
-Inside Docker, `rag-app` must use `http://host.docker.internal:11434`; host-side ingestion uses `http://localhost:11434`. For Ollama embeddings, `EMBEDDING_CHECK_CTX_LENGTH` must be `false`, otherwise LangChain sends token-ID arrays and Ollama responds with `invalid input type`.
+If the container is not running, inspect its logs:
+
+```bash
+docker compose -f docker-compose-ollama.yml logs --tail=100 ollama
+docker compose -f docker-compose-ollama.yml logs --tail=100 ollama-pull
+```
+
+If the models are missing, run the pull helper:
+
+```bash
+docker compose -f docker-compose-ollama.yml run --rm ollama-pull
+```
+
+`rag-app` reaches Ollama at `http://ollama:11434` on the Compose network; host-side ingestion uses `http://localhost:11434`. For Ollama embeddings, `EMBEDDING_CHECK_CTX_LENGTH` must be `false`, otherwise LangChain sends token-ID arrays and Ollama responds with `invalid input type`.
+
+If port `11434` is already in use, stop host Ollama (`sudo systemctl stop ollama`) or start the stack with a different published port:
+
+```bash
+OLLAMA_HOST_PORT=11435 docker compose -f docker-compose-ollama.yml up -d
+```
 
 Inspect the resolved Ollama Compose configuration without printing `.env` secrets:
 

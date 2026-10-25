@@ -294,11 +294,14 @@ def endpoint_url(
 
 
 def build_metrics() -> tuple[list[Any], list[AsyncOpenAI]]:
-    """Build RAGAS 0.4.x collection metrics using the vLLM endpoints."""
+    """Build RAGAS 0.4.x collection metrics using OpenAI-compatible endpoints."""
 
-    judge_model = env_value(
-        "CHATBOT_MODEL",
-        "Qwen/Qwen2.5-0.5B-Instruct",
+    judge_model = (
+        env_value("RAGAS_JUDGE_MODEL")
+        or env_value(
+            "CHATBOT_MODEL",
+            "Qwen/Qwen2.5-0.5B-Instruct",
+        )
     )
     judge_url = endpoint_url(
         "CHATBOT_SERVER",
